@@ -21,7 +21,7 @@ Every provider call has a status-polling path and a labelled replay path.
                 │  lib/rounds/           circle & round state machine, payout order                             │
                 │  lib/netting/          reads fx:position balances → settlement report                         │
                 │  lib/fx/               rate snapshot per round                                                │
-                │  lib/agent/            Claude treasurer: tools + confirmation protocol                        │
+                │  lib/agent/            AI treasurer: tools + confirmation protocol                            │
                 │  app/api/webhooks/*    paystack | daraja | momo  (verify → idempotent → journal)             │
                 └───────────────────────────────────────────────┬──────────────────────────────────────────────┘
                                                                 │
@@ -29,7 +29,7 @@ Every provider call has a status-polling path and a labelled replay path.
 ```
 
 **Stack:** Next.js 16 + TypeScript, Postgres (Neon via the Vercel Marketplace, or Supabase Postgres). The
-`postgres` driver talks to it with plain SQL migrations and no ORM. `@anthropic-ai/sdk` for the agent. There is no map
+`postgres` driver talks to it with plain SQL migrations and no ORM. DeepSeek (OpenAI-compatible API, called with plain `fetch`, no SDK) for the agent. There is no map
 library: the map is an inline SVG of Africa with four city nodes. The UI refreshes by polling (1.5 s), not WebSockets.
 
 **Why polling:** Vercel Hobby crons only run daily, and sandbox callbacks are unreliable. So we
@@ -186,7 +186,7 @@ the residual is the FX drift, shown in the UI.
 
 ## 6. The treasurer agent
 
-Model `claude-sonnet-5` via `@anthropic-ai/sdk` with tool use. **Load the `claude-api` skill before writing this code.**
+Model from `KITTY_AGENT_MODEL` (`deepseek-chat`) via DeepSeek's OpenAI-compatible `POST https://api.deepseek.com/chat/completions` with `tools` (function calling), using plain `fetch` and `DEEPSEEK_API_KEY`. No SDK dependency. The safety rules below are provider-independent: they are enforced server-side, never by the model.
 
 **Tools** (all server-side and scoped to the caller's circle; the agent never sees other circles):
 | Tool | Effect |

@@ -121,9 +121,9 @@ right at 360 px wide and on a projector. Check every screen against docs/DEMO.md
 ## ▶ Role C: the treasurer agent
 
 ```
-Read CLAUDE.md and docs/ARCHITECTURE.md §6. Load the claude-api skill before writing any agent code.
+Read CLAUDE.md and docs/ARCHITECTURE.md §6.
 
-Build src/lib/agent with @anthropic-ai/sdk, model from KITTY_AGENT_MODEL (claude-sonnet-5), tool use:
+Build src/lib/agent on DeepSeek's OpenAI-compatible chat completions API (plain fetch, DEEPSEEK_API_KEY, model from KITTY_AGENT_MODEL = deepseek-chat), tool use:
 get_circle_status, get_my_schedule, record_promise, prepare_payment, confirm_payment, exactly as
 specified. prepare_payment only creates a pending_actions token. confirm_payment is valid only when
 the SAME member explicitly said yes after the prepare, before expiry. The server derives every

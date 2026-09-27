@@ -13,7 +13,7 @@ Each day ends on a **gate**. If a gate fails, the next morning goes to fixing it
 
 ## D0 — Thu 09-24
 - [ ] Team confirmed, Summit registration on Luma, #BuildWithStacStart post, rules email (`RULES.md`)
-- [ ] Keys: Paystack test · Daraja sandbox app · MoMo sandbox (Collections + Disbursements) · Meta WhatsApp test number · Anthropic
+- [ ] Keys: Paystack test · Daraja sandbox app · MoMo sandbox (Collections + Disbursements) · Meta WhatsApp test number · DeepSeek
 - [ ] Public GitHub repo (MIT) with README stub and CI (typecheck + tests)
 - [ ] Next.js skeleton deployed to Vercel (webhooks need a public https URL from day one)
 - [ ] Ledger schema + migrations

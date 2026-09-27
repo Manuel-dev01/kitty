@@ -13,7 +13,7 @@ Savings circles (ajo, susu, chama) whose members live across **Nigeria, Kenya, U
 pays on their own local payment service: **Paystack** (NG), **M-Pesa Daraja** (KE), **MTN MoMo** (UG, GH). Each pot is
 paid out on the recipient's own service. A double-entry, multi-currency ledger records every cross-border fact
 in `fx:position:<ccy>` accounts. Those accounts are the netting engine. In a balanced circle, **net value
-crossing a border over a full cycle is zero**. A Claude treasurer agent (web chat, with WhatsApp as a stretch goal) handles
+crossing a border over a full cycle is zero**. An AI treasurer agent (DeepSeek, web chat, with WhatsApp as a stretch goal) handles
 reminders, promises and confirmed payment prompts.
 
 ## Rubric (drives everything)
@@ -32,7 +32,7 @@ Judges are industry experts **and employers**, so the repo is read like a portfo
   Vercel project `kitty` is Git-connected, so every push to `main` deploys. The Neon DB `kitty-db` (free, iad1) is wired to Vercel env.
   **Migrations run from GitHub Actions** ("Migrate database" workflow, on push to `db/migrations/**` or by hand), because the lead's
   network blocks outbound 5432. Locally, run `vercel env pull .env.local`.
-- ⬜ D0 leftovers: sandbox keys (Paystack test, Daraja, MoMo, Anthropic) into Vercel env + `.env.local`
+- ⬜ D0 leftovers: `DARAJA_B2C_SHORTCODE` (portal B2C simulator, Party A). Every other key is in Vercel env. Add keys with `vercel env add`, never by editing `.env.local` (a pull overwrites it)
 - ⬜ D1–D4 per `docs/ROADMAP.md`
 
 ## Hard constraints

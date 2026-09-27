@@ -67,7 +67,7 @@ Judged by "industry experts and employer partners."
 | **Paystack test mode** | NG collections (checkout), transfers, HMAC-signed webhooks; instant keys | Currency tied to the business country (NGN). Transfers need OTP disabled in the dashboard |
 | **Safaricom Daraja sandbox** | KE STK push (PIN prompt) + B2C payout; free, instant credentials (shortcode 174379) | Intermittently slow; callbacks unreliable, so we poll `stkpushquery` |
 | **MTN MoMo Open API sandbox** | UG + GH collections (RequestToPay) and disbursements; self-serve keys | **Sandbox handles only EUR**; callbacks unreliable, so we poll status |
-| **Claude Sonnet 5 (tool use)** | The treasurer agent: reads state, starts payments only after confirmation | Tools must be narrow; the LLM never sets amounts |
+| **DeepSeek (tool calling)** | The treasurer agent: reads state, starts payments only after confirmation | Tools must be narrow; the LLM never sets amounts |
 | **WhatsApp Cloud API test number** | Real WhatsApp channel without business verification | 5 recipient numbers max. **Stretch only**; the web chat is primary |
 | **Spitch** | STT/TTS for Yoruba, Hausa, Igbo, Swahili | No Twi. **Cut** under the compressed timeline |
 | **Multilateral netting (PAPSS principle)** | The core insight, and pure logic we own | None. This is the moat |
