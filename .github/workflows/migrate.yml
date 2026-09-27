@@ -1,0 +1,27 @@
+name: Migrate database
+
+# Applies db/migrations to the Neon database. Runs when a migration lands on main, or by hand
+# (Actions → Migrate database → Run workflow). Anyone on the team can migrate without local DB access.
+on:
+  push:
+    branches: [main]
+    paths: ['db/migrations/**', 'scripts/migrate.mjs']
+  workflow_dispatch:
+
+concurrency:
+  group: migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run migrate
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}

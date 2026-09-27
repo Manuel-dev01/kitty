@@ -42,9 +42,10 @@ describe.skipIf(!url)('ledger invariants in Postgres', () => {
   });
 
   afterEach(async () => {
-    await sql.end();
-    await admin.unsafe(`drop schema ${schema} cascade`);
-    await admin.end();
+    // Tolerates a failed beforeEach (e.g. DB unreachable) so the real error is the one reported.
+    await sql?.end();
+    await admin?.unsafe(`drop schema if exists ${schema} cascade`).catch(() => {});
+    await admin?.end();
   });
 
   const rawJournal = (lines: [string, string, bigint][]) =>

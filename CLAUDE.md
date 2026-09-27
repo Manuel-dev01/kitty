@@ -27,7 +27,11 @@ Judges are industry experts **and employers**, so the repo is read like a portfo
 - ✅ Foundation: Next 16 scaffold, migrations + invariant triggers, `lib/ledger`, `lib/fx`, `lib/netting`, rail
   interface + stubs, CI workflow, MIT licence. Invariants 1–3 and idempotency are tested. Conversion is **unit-based** (ARCHITECTURE §4).
   Size pool float in whole units (`3 × price($50)`), never `price($150)`.
-- ⬜ D0 leftovers: keys, public GitHub repo (not yet `git init`), Vercel deploy, run `npm run migrate` on Neon
+- ✅ Infra: public repo https://github.com/Manuel-dev01/kitty (CI runs typecheck + all tests against Postgres).
+  Vercel project `kitty` is Git-connected, so every push to `main` deploys. The Neon DB `kitty-db` (free, iad1) is wired to Vercel env.
+  **Migrations run from GitHub Actions** ("Migrate database" workflow, on push to `db/migrations/**` or by hand), because the lead's
+  network blocks outbound 5432. Locally, run `vercel env pull .env.local`.
+- ⬜ D0 leftovers: sandbox keys (Paystack test, Daraja, MoMo, Anthropic) into Vercel env + `.env.local`
 - ⬜ D1–D4 per `docs/ROADMAP.md`
 
 ## Hard constraints

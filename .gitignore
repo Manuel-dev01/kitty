@@ -1,9 +1,15 @@
 node_modules/
 .next/
-.env
-.env.local
-.env*.local
 *.tsbuildinfo
 next-env.d.ts
 .vercel
 .DS_Store
+
+# Secrets: every .env file except the committed template. (Keep the negation LAST: last match wins.)
+.env*
+!.env.example
+
+# Vendor agent docs installed by `vercel integration add neon` (local tooling, not project code)
+.agents/
+.claude/skills/neon*/
+skills-lock.json

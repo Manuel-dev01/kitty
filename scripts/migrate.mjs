@@ -1,20 +1,24 @@
 // Applies db/migrations/*.sql in order, each in its own transaction, skipping ones already applied.
-// Usage: npm run migrate   (reads DATABASE_URL from the environment or .env)
+// Usage: npm run migrate   (reads the environment, then .env.local and .env, as Next does)
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import postgres from 'postgres';
 
-try {
-  process.loadEnvFile?.('.env');
-} catch {
-  // No .env file (CI, Vercel): use the real environment.
+for (const file of ['.env.local', '.env']) {
+  try {
+    process.loadEnvFile?.(file); // never overrides variables already set
+  } catch {
+    // File absent (CI, Vercel): use the real environment.
+  }
 }
 
-const url = process.env.DATABASE_URL;
+// DDL goes over a direct connection, not the transaction pooler.
+const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 if (!url) {
   console.error('DATABASE_URL is not set.');
   process.exit(1);
 }
+console.log(`Migrating ${new URL(url).host}${new URL(url).pathname}`);
 
 const dir = join(import.meta.dirname, '..', 'db', 'migrations');
 const sql = postgres(url, { max: 1, onnotice: () => {} });
