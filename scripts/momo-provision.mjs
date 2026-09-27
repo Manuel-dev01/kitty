@@ -59,8 +59,9 @@ async function provision({ name, env }) {
 
 function saveToVercel(name, value) {
   for (const target of ['production', 'development']) {
-    spawnSync('vercel', ['env', 'rm', name, target, '--yes'], { stdio: 'ignore', shell: true });
-    const r = spawnSync('vercel', ['env', 'add', name, target], { input: value, stdio: ['pipe', 'ignore', 'pipe'], shell: true });
+    // `name` and `target` are fixed identifiers; the secret value only ever travels on stdin.
+    spawnSync(`vercel env rm ${name} ${target} --yes`, { stdio: 'ignore', shell: true });
+    const r = spawnSync(`vercel env add ${name} ${target}`, { input: value, stdio: ['pipe', 'ignore', 'pipe'], shell: true });
     if (r.status !== 0) throw new Error(`vercel env add ${name} ${target} failed: ${r.stderr}`);
   }
   console.log(`✓ saved ${name} to Vercel (production, development)`);
