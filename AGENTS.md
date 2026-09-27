@@ -48,7 +48,11 @@ Judges are industry experts **and employers**, so the repo is read like a portfo
   Replay (`rounds.replay_allowed`): in judge mode, the Paystack verify step can be served from the latest recorded REAL success
   in `provider_calls`, with a `replay` badge.
 - Lesson learned live: provider webhooks and polls reconcile concurrently. Every round status change must be compare-and-set.
-- ⬜ Role C (DeepSeek treasurer agent in the chat slot), the late-member beat, README + video. See `docs/ROADMAP.md`
+- ✅ Role C: the treasurer agent (`lib/agent`, `POST /api/agent`, chat on `/c/[circleId]`) runs on `deepseek-flash`. Tools are bound
+  to the session member. `confirm_payment` takes no arguments and needs the member's own explicit yes, judged by the server
+  (`consent.ts`). The adversarial tests are in `agent.db.test.ts`; the live English, Pidgin and Swahili run is in `agent.live.ts`.
+  The late-member beat ran live on production: Kofi's Pidgin promise, then a confirmed MoMo payment.
+- ⬜ README (judge guide, real vs replay vs simulated, honest limits), the Claude Design UI pass (`docs/DESIGN_BRIEF.md`), and the video.
 
 ## Hard constraints
 
