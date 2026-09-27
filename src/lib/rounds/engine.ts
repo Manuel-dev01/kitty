@@ -235,7 +235,7 @@ export function makeRounds(deps: RoundsDeps) {
     const [payout] = await sql<Row[]>`
       insert into payouts (round_id, member_id, ccy, amount_minor, status)
       values (${round.id}, ${round.recipient_member_id}, ${ccy}, ${pot.toString()}, 'pending')
-      on conflict (round_id) do update set amount_minor = excluded.amount_minor, status = 'pending', provider_ref = null
+      on conflict (round_id) do update set amount_minor = excluded.amount_minor, status = 'pending', provider_ref = null, simulated = null
       returning id`;
     const [{ n }] = await sql<Row[]>`
       select count(*)::int as n from journals where kind = 'payout' and ref_type = 'payout' and ref_id like ${`${payout.id}#%`}`;
@@ -256,7 +256,7 @@ export function makeRounds(deps: RoundsDeps) {
     const [recipient] = await sql<Row[]>`select * from members where id = ${round.recipient_member_id}`;
     try {
       const res = await deps.rail(country, snap).payout({ payoutId: payout.id, member: toMember(recipient), amountMinor: pot });
-      await sql`update payouts set provider_ref = ${res.providerRef} where id = ${payout.id}`;
+      await sql`update payouts set provider_ref = ${res.providerRef}, requested_at = now() where id = ${payout.id}`;
     } catch (e) {
       // A documented sandbox limit (e.g. Paystack Starter accounts can't transfer) completes the payout,
       // labelled. The journal stands. Anything else is reversed and waits for an explicit retry.
@@ -327,18 +327,25 @@ export function makeRounds(deps: RoundsDeps) {
 
     // 5. Paying: ask the recipient's rail whether the payout landed.
     if (round.status === 'paying') {
-      const [p] = await sql<Row[]>`select * from payouts where round_id = ${roundId}`;
+      const [p] = await sql<Row[]>`
+        select *, extract(epoch from now() - coalesce(requested_at, now() - interval '1 hour'))::int as age_s
+        from payouts where round_id = ${roundId}`;
       if (!p?.provider_ref) return;
       let status: RailStatus = 'pending';
       try {
         status = await deps.rail(round.recipient_country, snap).payoutStatus(p.provider_ref);
       } catch {
-        return;
+        // provider unreachable: treated as still pending
       }
       if (status === 'succeeded') {
         await markPaid(round, p.id);
       } else if (status === 'failed') {
         await reversePayout(round, p.id);
+      } else {
+        // A real result always wins; only a documented limit may confirm an accepted payout that never reports back.
+        const [recipient] = await sql<Row[]>`select * from members where id = ${round.recipient_member_id}`;
+        const simulated = deps.limits?.payoutUnconfirmed(toMember(recipient), Number(p.age_s)) ?? null;
+        if (simulated) await markPaid(round, p.id, simulated);
       }
     }
   }

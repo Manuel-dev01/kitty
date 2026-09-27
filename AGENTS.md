@@ -53,7 +53,8 @@ Judges are industry experts **and employers**, so the repo is read like a portfo
 - **The LLM never moves money.** It never sets amounts, and every money action is `prepare_payment` → member says yes → `confirm_payment`.
 - **Replay is never silent.** Any step served from recorded fixtures shows a `replay` badge.
 - **Simulation is never silent, and only for documented sandbox limits** (`src/lib/rounds/sandbox-limits.ts`: the Daraja test MSISDN
-  can't approve an STK push; a Paystack Starter account can't transfer). The real call is always made first and its reference kept.
+  can't approve an STK push; a Paystack Starter account can't transfer; Daraja B2C sends no result callback, confirmed after 20 s).
+  The real call is always made first and its reference kept.
   The step's `simulated` reason is stored and returned by the API, and the UI shows a `simulated · sandbox limit` badge. Never add a case without a live finding.
 - Keep dependencies minimal and use `npm`. The lead's machine is on slow bandwidth.
 - **Scaffold by hand.** `create-next-app` refuses this folder because it already contains docs. Write `package.json`, `tsconfig.json`

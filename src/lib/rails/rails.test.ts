@@ -155,4 +155,10 @@ describe('sandbox limits: only the two documented cases qualify', async () => {
     expect(sandboxLimits.payout(m('NG', ''), new Error('network'))).toBeNull();
     expect(sandboxLimits.payout(m('KE', ''), starter)).toBeNull();
   });
+
+  it('Daraja B2C: only Kenya, only after the 20 s wait', () => {
+    expect(sandboxLimits.payoutUnconfirmed(m('KE', ''), 5)).toBeNull();
+    expect(sandboxLimits.payoutUnconfirmed(m('KE', ''), 20)).toMatch(/no result callback/);
+    expect(sandboxLimits.payoutUnconfirmed(m('UG', ''), 3600)).toBeNull(); // MoMo has a real status query
+  });
 });

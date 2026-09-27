@@ -20,6 +20,7 @@ function fakeRails() {
   const collectAs = new Map<Country, RailStatus>();
   const payoutDown = new Set<Country>();
   const payoutError = new Map<Country, unknown>();
+  const payoutSilent = new Set<Country>(); // accepted, but never reports a result (Daraja B2C sandbox)
   let n = 0;
   const rail = (country: Country): RailAdapter => ({
     country,
@@ -34,13 +35,13 @@ function fakeRails() {
       if (payoutError.has(country)) throw payoutError.get(country);
       if (payoutDown.has(country)) throw new Error(`${country} rail down`);
       const ref = `fake-p-${++n}`;
-      status.set(ref, 'succeeded');
+      if (!payoutSilent.has(country)) status.set(ref, 'succeeded');
       return { providerRef: ref };
     },
     payoutStatus: async (ref) => status.get(ref) ?? 'pending',
     parseWebhook: async () => null,
   });
-  return { rail, collectAs, payoutDown, payoutError };
+  return { rail, collectAs, payoutDown, payoutError, payoutSilent };
 }
 
 describe.skipIf(!testDbUrl)('rounds engine in Postgres', () => {
@@ -214,6 +215,35 @@ describe.skipIf(!testDbUrl)('rounds engine in Postgres', () => {
       expect(s.round.status).toBe('paid');
       expect(s.payout).toMatchObject({ status: 'succeeded', simulated: expect.stringMatching(/Starter business/) });
       expect(s.journals.filter((j) => j.ref.type === 'payout_reversal')).toHaveLength(0);
+    });
+
+    it('Kenya B2C with no result callback: waits, then confirms by labelled simulation after 20 s', async () => {
+      const { roundId } = await resetDemo(sql, rounds, takeSnapshot);
+      rails.payoutSilent.add('KE');
+      await payAll(roundId!);
+      await rounds.reconcile(roundId!);
+      let s = (await roundState(sql, rounds, roundId!))!;
+      expect(s.round.status).toBe('paying'); // just sent: keep waiting for the real result
+      await sql`update payouts set requested_at = now() - interval '25 seconds' where round_id = ${roundId}`;
+      await rounds.reconcile(roundId!);
+      s = (await roundState(sql, rounds, roundId!))!;
+      expect(s.round.status).toBe('paid');
+      expect(s.payout).toMatchObject({
+        status: 'succeeded',
+        providerRef: expect.stringMatching(/^fake-p-/),
+        simulated: expect.stringMatching(/no result callback/),
+      });
+    });
+
+    it('without limits, an unconfirmed payout just keeps waiting', async () => {
+      const strict = makeRounds({ sql, rail: (country) => rails.rail(country), takeSnapshot, today: () => '2026-09-27' });
+      const { roundId } = await resetDemo(sql, strict, takeSnapshot);
+      rails.payoutSilent.add('KE');
+      await payAll(roundId!);
+      await strict.reconcile(roundId!);
+      await sql`update payouts set requested_at = now() - interval '1 hour' where round_id = ${roundId}`;
+      await strict.reconcile(roundId!);
+      expect((await roundState(sql, strict, roundId!))!.round.status).toBe('paying');
     });
 
     it('any other failure is NOT simulated: a real payout error is still reversed', async () => {
