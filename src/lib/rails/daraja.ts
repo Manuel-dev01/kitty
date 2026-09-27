@@ -48,6 +48,8 @@ export function nairobiTimestamp(d = new Date()): string {
 
 /** Daraja takes whole shillings: round KES cents UP, never charge less than the ledger amount. */
 export const wholeShillings = (cents: bigint): bigint => (cents + 99n) / 100n;
+/** B2C payouts round DOWN to whole shillings, so a payout never takes more than the pot from the pool. */
+export const wholeShillingsDown = (cents: bigint): bigint => cents / 100n;
 
 /** 2547XXXXXXXX: Daraja wants the MSISDN without "+". */
 export const msisdn = (phone: string | null): string => {
@@ -122,7 +124,7 @@ export const daraja: RailAdapter = {
   },
 
   async payout({ payoutId, member, amountMinor }) {
-    const amount = wholeShillings(amountMinor);
+    const amount = wholeShillingsDown(amountMinor);
     const data = await call<{ OriginatorConversationID: string; ConversationID: string; ResponseCode: string }>(
       'payout',
       '/mpesa/b2c/v3/paymentrequest',

@@ -28,7 +28,7 @@ describe('Daraja sandbox (live)', () => {
     expect(status).toBe('pending');
   });
 
-  it('payout: sends a real B2C v3 payment request for KES 25,868.36 (charged as 25,869 whole shillings)', async () => {
+  it('payout: sends a real B2C v3 payment request for KES 25,868.36 (paid as 25,868 whole shillings, rounded down)', async () => {
     const res = await daraja.payout({ payoutId: crypto.randomUUID(), member: wanjiru, amountMinor: 2_586_836n });
     console.log('Daraja B2C OriginatorConversationID:', res.providerRef);
     expect(res.providerRef).toBeTruthy();

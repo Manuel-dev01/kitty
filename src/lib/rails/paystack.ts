@@ -63,9 +63,14 @@ async function createRecipient(member: Member): Promise<string> {
   return data.recipient_code;
 }
 
-export const paystack: RailAdapter = {
+export const paystack: RailAdapter & { collectedAmount(reference: string): Promise<bigint> } = {
   country: 'NG',
   currency: 'NGN',
+
+  /** What Paystack actually charged (kobo). Reconciliation refuses a payment short of the contribution. */
+  async collectedAmount(reference) {
+    return (await verifyCharge(reference)).amountMinor;
+  },
 
   async collect({ contributionId, member, amountMinor }) {
     const reference = paystackReference('ctb', contributionId);

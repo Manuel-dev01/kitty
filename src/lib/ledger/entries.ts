@@ -12,7 +12,7 @@
  */
 import { usdToMinor } from '../fx/convert';
 import type { FxSnapshot } from '../fx/types';
-import { cashAccount, floatEquity, fxPosition, potAccount } from './accounts';
+import { cashAccount, floatEquity, fxPosition, fxRounding, potAccount } from './accounts';
 import type { Ccy, Line, Rail } from './types';
 
 /** Combines lines on the same account and drops zeros, so journals stay readable. */
@@ -37,12 +37,23 @@ export function floatSeedLines(rail: Rail, ccy: Ccy, amountMinor: bigint): Line[
   ];
 }
 
-/** A member paid on their own rail: the money sits in their country's pool; the circle owes it. */
-export function contributionLines(circleId: string, rail: Rail, ccy: Ccy, amountMinor: bigint): Line[] {
-  return [
-    { account: cashAccount(rail, ccy), ccy, amountMinor },
+/**
+ * A member paid on their own rail: the money sits in their country's pool; the circle owes it.
+ * `cashReceivedMinor` is what the rail actually took (Daraja charges whole shillings, rounded up);
+ * any difference is posted to fx:rounding so it stays visible instead of hiding in the pot.
+ */
+export function contributionLines(
+  circleId: string,
+  rail: Rail,
+  ccy: Ccy,
+  amountMinor: bigint,
+  cashReceivedMinor: bigint = amountMinor,
+): Line[] {
+  return mergeLines([
+    { account: cashAccount(rail, ccy), ccy, amountMinor: cashReceivedMinor },
     { account: potAccount(circleId, ccy), ccy, amountMinor: -amountMinor },
-  ];
+    { account: fxRounding(ccy), ccy, amountMinor: amountMinor - cashReceivedMinor },
+  ]);
 }
 
 export interface PotSource {
@@ -72,10 +83,24 @@ export function conversionLines(circleId: string, target: Ccy, sources: readonly
   return mergeLines(lines);
 }
 
-/** The pot leaves from the recipient's own country pool, on their own rail. */
-export function payoutLines(circleId: string, rail: Rail, ccy: Ccy, amountMinor: bigint): Line[] {
-  return [
+/**
+ * The pot leaves from the recipient's own country pool, on their own rail. `cashPaidMinor` is what the
+ * rail actually sends (Daraja B2C pays whole shillings, rounded down to protect the pool); the
+ * difference goes to fx:rounding.
+ */
+export function payoutLines(
+  circleId: string,
+  rail: Rail,
+  ccy: Ccy,
+  amountMinor: bigint,
+  cashPaidMinor: bigint = amountMinor,
+): Line[] {
+  return mergeLines([
     { account: potAccount(circleId, ccy), ccy, amountMinor },
-    { account: cashAccount(rail, ccy), ccy, amountMinor: -amountMinor },
-  ];
+    { account: cashAccount(rail, ccy), ccy, amountMinor: -cashPaidMinor },
+    { account: fxRounding(ccy), ccy, amountMinor: cashPaidMinor - amountMinor },
+  ]);
 }
+
+/** Undoes a journal whose provider call failed: the exact negation of its lines. */
+export const reversalLines = (lines: readonly Line[]): Line[] => lines.map((l) => ({ ...l, amountMinor: -l.amountMinor }));
