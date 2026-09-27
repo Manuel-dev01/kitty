@@ -5,6 +5,7 @@ export function makeSql(url: string, options: postgres.Options<{}> = {}) {
   return postgres(url, {
     // Neon's pooled URL goes through PgBouncer in transaction mode, which can't hold prepared statements.
     prepare: false,
+    connect_timeout: 10,
     ...options,
     types: { bigint: postgres.BigInt },
     onnotice: () => {},
