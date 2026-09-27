@@ -32,7 +32,7 @@ Judges are industry experts **and employers**, so the repo is read like a portfo
   Vercel project `kitty` is Git-connected, so every push to `main` deploys. The Neon DB `kitty-db` (free, iad1) is wired to Vercel env.
   **Migrations run from GitHub Actions** ("Migrate database" workflow, on push to `db/migrations/**` or by hand), because the lead's
   network blocks outbound 5432. Locally, run `vercel env pull .env.local`.
-- ⬜ D0 leftovers: `DARAJA_B2C_SHORTCODE` (portal B2C simulator, Party A). Every other key is in Vercel env. Add keys with `vercel env add`, never by editing `.env.local` (a pull overwrites it)
+- ✅ Keys: all sandbox keys are in Vercel env (Paystack test, Daraja incl. B2C shortcode 600991, MoMo provisioned via `npm run momo:provision`, DeepSeek). Pull with `vercel env pull .env.local`. Add keys with `vercel env add`, never by editing `.env.local` (a pull overwrites it)
 - ⬜ D1–D4 per `docs/ROADMAP.md`
 
 ## Hard constraints
