@@ -42,7 +42,13 @@ Judges are industry experts **and employers**, so the repo is read like a portfo
   - **Paystack:** payouts are refused on a Starter business ("You cannot initiate third party payouts as a starter business").
     NG collection works; judges complete a test checkout.
   - MoMo UG/GH collect and payout succeed live (EUR).
-- ⬜ Role B (dashboard, judge mode, replay badges), Role C (DeepSeek treasurer agent). See `docs/ROADMAP.md`
+- ✅ Role B: `/dashboard` (SVG map, ledger, netting meter, pool health, Invariant 2 banner, judge mode: Run a round, Run full cycle,
+  Reset demo) and `/c/[circleId]` (members, Pay per rail, chat slot). Verified at 360 px and 1440 px. **A full cycle ran live on
+  production in 70 s and ended on "Moved $800 · Crossed a border $0"**, with every `fx:position` 0 and every pool back at its float.
+  Replay (`rounds.replay_allowed`): in judge mode, the Paystack verify step can be served from the latest recorded REAL success
+  in `provider_calls`, with a `replay` badge.
+- Lesson learned live: provider webhooks and polls reconcile concurrently. Every round status change must be compare-and-set.
+- ⬜ Role C (DeepSeek treasurer agent in the chat slot), the late-member beat, README + video. See `docs/ROADMAP.md`
 
 ## Hard constraints
 
