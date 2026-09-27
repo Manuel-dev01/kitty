@@ -12,6 +12,7 @@ import { limitsFromEnv } from './sandbox-limits';
 export { makeRounds, RoundError, railAmount, type Rounds, type RoundsDeps } from './engine';
 export { currentDemo, resetDemo, DEMO_MEMBERS } from './demo';
 export { roundState } from './state';
+export { judgeAdvance } from './judge';
 export { sandboxLimits, DARAJA_TEST_MSISDN, type SandboxLimits } from './sandbox-limits';
 
 /** Each member pays and is paid on their own country's rail. MoMo is bound to the round's snapshot (EUR). */

@@ -100,7 +100,7 @@ export function makeRounds(deps: RoundsDeps) {
 
   const contributionsOf = (roundId: string) => sql<Row[]>`
     select c.id, c.round_id, c.member_id, c.ccy, c.amount_minor, c.rail_amount_minor, c.rail_ccy, c.provider_ref,
-           c.status, c.promised_for, c.simulated, m.circle_id, m.name, m.country, m.phone, m.email, m.rail,
+           c.status, c.promised_for, c.simulated, c.replay, m.circle_id, m.name, m.country, m.phone, m.email, m.rail,
            m.payout_position, m.reputation_score
     from contributions c join members m on m.id = c.member_id
     where c.round_id = ${roundId}
@@ -198,14 +198,15 @@ export function makeRounds(deps: RoundsDeps) {
     }
     // A documented sandbox limit may complete this step, but only after the real call above, and labelled.
     const simulated = status === 'succeeded' ? null : (deps.limits?.collect(toMember(c), status) ?? null);
-    if (!simulated && status === 'pending') return;
+    const replay = !simulated && status === 'pending' && round.replay_allowed ? await replayFor(c) : null;
+    if (!simulated && !replay && status === 'pending') return;
     if (!simulated && status === 'failed') {
       await sql`update contributions set status = 'failed' where id = ${c.id} and status = 'pending'`;
       return;
     }
     const amount = BigInt(c.amount_minor);
     const collected = (adapter as Partial<{ collectedAmount(ref: string): Promise<bigint> }>).collectedAmount;
-    if (!simulated && collected && (await collected.call(adapter, c.provider_ref)) < amount) {
+    if (!simulated && !replay && collected && (await collected.call(adapter, c.provider_ref)) < amount) {
       await sql`update contributions set status = 'failed' where id = ${c.id}`; // short payment
       return;
     }
@@ -216,7 +217,23 @@ export function makeRounds(deps: RoundsDeps) {
       { type: 'contribution', id: c.id },
       contributionLines(round.circle_id, COUNTRY_RAIL[country], c.ccy as Ccy, amount, received),
     );
-    await sql`update contributions set status = 'succeeded', simulated = ${simulated} where id = ${c.id}`;
+    await sql`update contributions set status = 'succeeded', simulated = ${simulated}, replay = ${replay} where id = ${c.id}`;
+  }
+
+  /**
+   * Replay (ARCHITECTURE §7): when judge mode runs a round with nobody at the Paystack checkout, the
+   * verify step is served from the latest RECORDED REAL successful Paystack verify in provider_calls.
+   * If none has ever been recorded, there is nothing to replay and the step keeps waiting.
+   */
+  async function replayFor(c: Row): Promise<string | null> {
+    if (c.country !== 'NG') return null;
+    const [fixture] = await sql<Row[]>`
+      select id, response->'data'->>'reference' as reference, response->'data'->>'amount' as amount, created_at
+      from provider_calls
+      where provider = 'paystack' and op = 'verify' and status_code = 200 and response->'data'->>'status' = 'success'
+      order by id desc limit 1`;
+    if (!fixture) return null;
+    return `Paystack verify replayed from a recorded real success (provider_calls #${fixture.id}, ${fixture.reference}, ${new Date(fixture.created_at).toISOString().slice(0, 16)}Z): judge mode had no one at the test checkout. A real checkout was created for this contribution.`;
   }
 
   async function markPaid(round: Row, payoutId: string, simulated: string | null = null) {
@@ -231,6 +248,11 @@ export function makeRounds(deps: RoundsDeps) {
     const ccy = COUNTRY_CCY[country];
     const pot = -(await ledger.balance(potAccount(round.circle_id, ccy), ccy)); // the pot is a credit balance
     if (pot <= 0n) throw new RoundError('Nothing in the pot to pay out', 500);
+
+    // Claim the funded → paying transition atomically: with the dashboard polling every 1.5 s, two reads
+    // can overlap, and only one of them may send money.
+    const [claimed] = await sql<Row[]>`update rounds set status = 'paying' where id = ${round.id} and status = 'funded' returning id`;
+    if (!claimed) return;
 
     const [payout] = await sql<Row[]>`
       insert into payouts (round_id, member_id, ccy, amount_minor, status)
@@ -251,8 +273,6 @@ export function makeRounds(deps: RoundsDeps) {
       await sql`update rounds set status = 'withheld' where id = ${round.id}`;
       return;
     }
-    await sql`update rounds set status = 'paying' where id = ${round.id}`;
-
     const [recipient] = await sql<Row[]>`select * from members where id = ${round.recipient_member_id}`;
     try {
       const res = await deps.rail(country, snap).payout({ payoutId: payout.id, member: toMember(recipient), amountMinor: pot });
@@ -350,6 +370,11 @@ export function makeRounds(deps: RoundsDeps) {
     }
   }
 
+  /** Judge mode: allow this round's Paystack step to be served by replay (never silent). */
+  async function allowReplay(roundId: string) {
+    await sql`update rounds set replay_allowed = true where id = ${roundId}`;
+  }
+
   /** Explicit retry after a failed payout (never automatic). */
   async function retryPayout(roundId: string) {
     const round = await loadRound(roundId);
@@ -376,6 +401,7 @@ export function makeRounds(deps: RoundsDeps) {
     recordPromise,
     reconcile,
     retryPayout,
+    allowReplay,
     roundForProviderRef,
     snapshotById,
     loadRound,

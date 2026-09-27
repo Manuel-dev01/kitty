@@ -11,7 +11,7 @@ export const DEMO_MEMBERS = [
   { name: 'Wanjiru Kamau', country: 'KE', rail: 'daraja', phone: '254708374149', email: null, reputation: 900 },
   { name: 'Tunde Adeyemi', country: 'NG', rail: 'paystack', phone: '+2348000000001', email: 'tunde.kitty@example.com', reputation: 800 },
   { name: 'Nakato Namutebi', country: 'UG', rail: 'momo', phone: '256772123456', email: null, reputation: 700 },
-  { name: 'Kwame Mensah', country: 'GH', rail: 'momo', phone: '233241234567', email: null, reputation: 650 },
+  { name: 'Kofi Mensah', country: 'GH', rail: 'momo', phone: '233241234567', email: null, reputation: 650 },
 ] as const;
 
 export async function resetDemo(sql: Sql, rounds: Rounds, takeSnapshot: () => Promise<{ id?: string }>) {

@@ -9,7 +9,7 @@ import { COUNTRY_CCY, COUNTRY_RAIL, CURRENCIES, cashAccount, fxPosition, fxRound
 import type { RailAdapter, RailStatus } from '@/lib/rails/types';
 import { freshSchema, testDbUrl } from '@/test/pg';
 import { ProviderError } from '@/lib/rails/http';
-import { makeRounds, resetDemo, roundState, sandboxLimits, type Rounds } from '.';
+import { judgeAdvance, makeRounds, resetDemo, roundState, sandboxLimits, type Rounds } from '.';
 import { handleProviderEvent } from './webhooks';
 
 const RATES = { NGN: '1532.456789', KES: '129.3417', UGX: '3712.345678', GHS: '11.87654', EUR: '0.8612' };
@@ -22,6 +22,7 @@ function fakeRails() {
   const payoutError = new Map<Country, unknown>();
   const payoutSilent = new Set<Country>(); // accepted, but never reports a result (Daraja B2C sandbox)
   let n = 0;
+  const payoutCalls: Country[] = [];
   const rail = (country: Country): RailAdapter => ({
     country,
     currency: COUNTRY_CCY[country],
@@ -32,6 +33,7 @@ function fakeRails() {
     },
     collectStatus: async (ref) => status.get(ref) ?? 'pending',
     async payout() {
+      payoutCalls.push(country);
       if (payoutError.has(country)) throw payoutError.get(country);
       if (payoutDown.has(country)) throw new Error(`${country} rail down`);
       const ref = `fake-p-${++n}`;
@@ -41,7 +43,7 @@ function fakeRails() {
     payoutStatus: async (ref) => status.get(ref) ?? 'pending',
     parseWebhook: async () => null,
   });
-  return { rail, collectAs, payoutDown, payoutError, payoutSilent };
+  return { rail, collectAs, payoutDown, payoutError, payoutSilent, payoutCalls };
 }
 
 describe.skipIf(!testDbUrl)('rounds engine in Postgres', () => {
@@ -254,6 +256,59 @@ describe.skipIf(!testDbUrl)('rounds engine in Postgres', () => {
       const s = (await roundState(sql, rounds, roundId!))!;
       expect(s.round.status).toBe('funded');
       expect(s.payout).toMatchObject({ status: 'failed', simulated: null });
+    });
+  });
+
+  describe('judge mode, replay and concurrency', () => {
+    const recordRealPaystackSuccess = () => sql`
+      insert into provider_calls (provider, op, request, response, status_code, ms)
+      values ('paystack', 'verify', '{}', ${sql.json({ status: true, data: { status: 'success', reference: 'kitty-ctb-real', amount: 6643890 } })}, 200, 400)`;
+
+    it('two overlapping reconciles send exactly one payout', async () => {
+      const { roundId } = await resetDemo(sql, rounds, takeSnapshot);
+      await payAll(roundId!);
+      await Promise.all([rounds.reconcile(roundId!), rounds.reconcile(roundId!), rounds.reconcile(roundId!)]);
+      expect(rails.payoutCalls).toEqual(['KE']);
+      expect((await roundState(sql, rounds, roundId!))!.round.status).toBe('paid');
+    });
+
+    it('replay is used only when allowed, and only from a recorded REAL success', async () => {
+      const { roundId } = await resetDemo(sql, rounds, takeSnapshot);
+      rails.collectAs.set('NG', 'pending'); // nobody at the Paystack checkout
+      await payAll(roundId!);
+      await rounds.reconcile(roundId!);
+      const ng = () => roundState(sql, rounds, roundId!).then((s) => s!.contributions.find((c) => c.member.country === 'NG')!);
+      expect((await ng()).status).toBe('pending'); // not allowed: keeps waiting
+
+      await rounds.allowReplay(roundId!);
+      await rounds.reconcile(roundId!);
+      expect((await ng()).status).toBe('pending'); // allowed, but nothing real was ever recorded: still waits
+
+      await recordRealPaystackSuccess();
+      await rounds.reconcile(roundId!);
+      const c = await ng();
+      expect(c.status).toBe('succeeded');
+      expect(c.replay).toMatch(/recorded real success \(provider_calls #\d+, kitty-ctb-real/);
+      expect(c.providerRef).toMatch(/^fake-c-/); // the real checkout for this contribution is kept
+      expect(c.simulated).toBeNull();
+    });
+
+    it('Run full cycle: judgeAdvance hands-free from reset to "Moved $800 · Crossed a border $0"', async () => {
+      const { circleId } = await resetDemo(sql, rounds, takeSnapshot);
+      rails.collectAs.set('NG', 'pending');
+      await recordRealPaystackSuccess();
+      let last;
+      for (let i = 0; i < 6; i++) {
+        const step = await judgeAdvance(sql, rounds, circleId, { auto: true });
+        if (step.completed) break;
+        expect(step.started.every((x) => !('error' in x))).toBe(true);
+        await rounds.reconcile(step.roundId!);
+        last = (await roundState(sql, rounds, step.roundId!))!;
+        expect(last.round.status).toBe('paid');
+      }
+      expect(last!.round.index).toBe(4);
+      expect(last!.netting.headline).toBe('Moved $800 · Crossed a border $0 (0%)');
+      expect((await judgeAdvance(sql, rounds, circleId, { auto: true })).completed).toBe(true);
     });
   });
 });

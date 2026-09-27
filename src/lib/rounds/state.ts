@@ -45,6 +45,7 @@ export async function roundState(sql: Sql, rounds: Rounds, roundId: string) {
       id: round.id,
       index: round.index,
       status: round.status,
+      replayAllowed: round.replay_allowed as boolean,
       recipient: { id: round.recipient_member_id, name: round.recipient_name, country: round.recipient_country, ccy: recipientCcy },
       fxSnapshot: { id: snap.id, source: snap.source, takenAt: snap.takenAt, rates: snap.rates },
     },
@@ -61,6 +62,8 @@ export async function roundState(sql: Sql, rounds: Rounds, roundId: string) {
       railNote: c.rail === 'momo' ? 'MoMo sandbox · settles in EUR' : null,
       /** Non-null when a documented sandbox limit completed this step: show a `simulated · sandbox limit` badge. */
       simulated: c.simulated as string | null,
+      /** Non-null when served from a recorded real provider response: show a `replay` badge. */
+      replay: c.replay as string | null,
     })),
     payout: payout
       ? {
