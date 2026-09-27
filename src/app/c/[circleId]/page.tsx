@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { MemberRow } from '@/components/MemberRow';
 import { NettingMeter } from '@/components/NettingMeter';
+import { TreasurerChat, type ChatMember } from '@/components/TreasurerChat';
 import { COUNTRY } from '@/lib/ui/format';
 import { useRoundState } from '@/lib/ui/useRoundState';
 
@@ -11,10 +12,11 @@ function CirclePage() {
   const { circleId } = useParams<{ circleId: string }>();
   const paidRef = useSearchParams().get('paid');
   const [roundId, setRoundId] = useState<string | null>(null);
+  const [members, setMembers] = useState<ChatMember[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const { state, error } = useRoundState(roundId);
+  const { state, error, refresh } = useRoundState(roundId);
 
   useEffect(() => {
     fetch(`/api/circles/${circleId}`, { cache: 'no-store' })
@@ -22,6 +24,7 @@ function CirclePage() {
         if (r.status === 404) return setNotFound(true);
         const d = await r.json();
         setRoundId(d.roundId);
+        setMembers(d.members);
       })
       .catch((e) => setMessage(String(e)));
   }, [circleId]);
@@ -120,14 +123,7 @@ function CirclePage() {
             <h2>This circle so far</h2>
             {state ? <NettingMeter netting={state.netting} /> : <p className="muted">—</p>}
           </section>
-          <section className="panel chat" aria-label="Treasurer agent">
-            <h2>Treasurer</h2>
-            <div className="msgs">
-              The circle’s AI treasurer lives here: reminders, “I go pay Friday abeg” promises, and payment prompts that only go out
-              after you say yes. It never sets amounts or moves money on its own.
-            </div>
-            <input placeholder="Chat with the treasurer (coming next)" disabled aria-disabled="true" />
-          </section>
+          {members.length > 0 && <TreasurerChat circleId={circleId} members={members} onActivity={() => void refresh()} />}
         </div>
       </div>
     </main>

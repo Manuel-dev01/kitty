@@ -123,7 +123,7 @@ right at 360 px wide and on a projector. Check every screen against docs/DEMO.md
 ```
 Read CLAUDE.md and docs/ARCHITECTURE.md §6.
 
-Build src/lib/agent on DeepSeek's OpenAI-compatible chat completions API (plain fetch, DEEPSEEK_API_KEY, model from KITTY_AGENT_MODEL = deepseek-v4-pro), tool use:
+Build src/lib/agent on DeepSeek's OpenAI-compatible chat completions API (plain fetch, DEEPSEEK_API_KEY, model from KITTY_AGENT_MODEL = deepseek-flash), tool use:
 get_circle_status, get_my_schedule, record_promise, prepare_payment, confirm_payment, exactly as
 specified. prepare_payment only creates a pending_actions token. confirm_payment is valid only when
 the SAME member explicitly said yes after the prepare, before expiry. The server derives every
