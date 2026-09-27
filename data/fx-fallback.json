@@ -1,0 +1,11 @@
+{
+  "note": "Indicative USD rates used only when open.er-api.com is unreachable. Exact decimal strings, never floats.",
+  "source": "fallback",
+  "takenAt": "2026-09-26T00:00:00Z",
+  "rates": {
+    "NGN": "1530.00",
+    "KES": "129.20",
+    "UGX": "3650",
+    "GHS": "11.95"
+  }
+}
