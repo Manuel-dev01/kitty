@@ -19,6 +19,8 @@ export function parseRatesText(text: string): Rates {
     if (parseDecimal(m[1]).num <= 0n) throw new Error(`FX API gave a non-positive ${ccy} rate`);
     rates[ccy] = m[1];
   }
+  const eur = /"EUR"\s*:\s*([0-9.eE+-]+)/.exec(text);
+  if (eur && parseDecimal(eur[1]).num > 0n) rates.EUR = eur[1];
   return rates;
 }
 
@@ -32,7 +34,7 @@ export async function fetchRates(
 }
 
 export function fallbackSnapshot(): FxSnapshot {
-  return { source: 'fallback', takenAt: fallback.takenAt, rates: fallback.rates as Record<Ccy, string> };
+  return { source: 'fallback', takenAt: fallback.takenAt, rates: fallback.rates as Rates };
 }
 
 /** Live rates if the API answers in time, otherwise the labelled fallback file. Never throws. */

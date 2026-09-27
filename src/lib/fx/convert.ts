@@ -19,6 +19,18 @@ export function minorToUsdCents(amountMinor: bigint, ccy: Ccy, snap: FxSnapshot)
   return roundHalfUp(div(rat(amountMinor), minorPerUsdCent(ccy, snap)));
 }
 
+/**
+ * Local minor units → EUR cents, for the MoMo sandbox (which only settles in EUR). Rounded UP so the
+ * rail never collects less than the ledger records. One rounding, at the end.
+ */
+export function toEurCents(amountMinor: bigint, ccy: Ccy, snap: FxSnapshot): bigint {
+  if (!snap.rates.EUR) throw new Error('FX snapshot has no EUR rate (needed for the MoMo sandbox)');
+  const eurCentsPerUsdCent = parseDecimal(snap.rates.EUR); // EUR has 2 decimals, like USD
+  const exact = mul(div(rat(amountMinor), minorPerUsdCent(ccy, snap)), eurCentsPerUsdCent);
+  const floor = exact.num / exact.den;
+  return exact.num % exact.den === 0n ? floor : floor + 1n;
+}
+
 /** Cross-rate conversion between two local currencies' minor units. One rounding, at the end. */
 export function convertMinor(amountMinor: bigint, from: Ccy, to: Ccy, snap: FxSnapshot): bigint {
   if (from === to) return amountMinor;
