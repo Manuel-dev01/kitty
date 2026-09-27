@@ -33,7 +33,16 @@ Judges are industry experts **and employers**, so the repo is read like a portfo
   **Migrations run from GitHub Actions** ("Migrate database" workflow, on push to `db/migrations/**` or by hand), because the lead's
   network blocks outbound 5432. Locally, run `vercel env pull .env.local`.
 - ✅ Keys: all sandbox keys are in Vercel env (Paystack test, Daraja incl. B2C shortcode 600991, MoMo provisioned via `npm run momo:provision`, DeepSeek). Pull with `vercel env pull .env.local`. Add keys with `vercel env add`, never by editing `.env.local` (a pull overwrites it)
-- ⬜ D1–D4 per `docs/ROADMAP.md`
+- ✅ Role A (rails + rounds): Paystack, Daraja and MoMo adapters are verified against the live sandboxes (`npm run test:live`).
+  The rounds engine is in `lib/rounds`. `GET /api/rounds/:id` reconciles on read, the webhooks record `provider_events` first,
+  and `POST /api/demo` resets the judge circle. The engine's full-cycle test on Postgres ends on "Moved $800 · Crossed a border $0".
+- ⚠️ Live limits found (the demo must design around them):
+  - **Daraja sandbox:** the test MSISDN 254708374149 never approves an STK push (it ends in `1037` "No response from user"),
+    so a Kenyan contribution can't succeed live without a real phone.
+  - **Paystack:** payouts are refused on a Starter business ("You cannot initiate third party payouts as a starter business").
+    NG collection works; judges complete a test checkout.
+  - MoMo UG/GH collect and payout succeed live (EUR).
+- ⬜ Role B (dashboard, judge mode, replay badges), Role C (DeepSeek treasurer agent). See `docs/ROADMAP.md`
 
 ## Hard constraints
 
