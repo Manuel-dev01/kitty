@@ -238,7 +238,7 @@ export function makeRounds(deps: RoundsDeps) {
 
   async function markPaid(round: Row, payoutId: string, simulated: string | null = null) {
     await sql`update payouts set status = 'succeeded', simulated = ${simulated} where id = ${payoutId}`;
-    await sql`update rounds set status = 'paid' where id = ${round.id}`;
+    await sql`update rounds set status = 'paid' where id = ${round.id} and status in ('paying', 'funded')`;
     const [{ n }] = await sql<Row[]>`select count(*)::int as n from members where circle_id = ${round.circle_id}`;
     if (round.index >= n) await sql`update circles set status = 'completed' where id = ${round.circle_id}`;
   }
@@ -246,13 +246,16 @@ export function makeRounds(deps: RoundsDeps) {
   async function initiatePayout(round: Row, snap: FxSnapshot) {
     const country = round.recipient_country as Country;
     const ccy = COUNTRY_CCY[country];
-    const pot = -(await ledger.balance(potAccount(round.circle_id, ccy), ccy)); // the pot is a credit balance
-    if (pot <= 0n) throw new RoundError('Nothing in the pot to pay out', 500);
-
-    // Claim the funded → paying transition atomically: with the dashboard polling every 1.5 s, two reads
-    // can overlap, and only one of them may send money.
+    // Claim the funded → paying transition atomically: polls (every 1.5 s) and provider webhooks reconcile
+    // concurrently, and only one of them may send money. The loser returns without touching anything.
     const [claimed] = await sql<Row[]>`update rounds set status = 'paying' where id = ${round.id} and status = 'funded' returning id`;
     if (!claimed) return;
+
+    const pot = -(await ledger.balance(potAccount(round.circle_id, ccy), ccy)); // the pot is a credit balance
+    if (pot <= 0n) {
+      await sql`update rounds set status = 'funded' where id = ${round.id} and status = 'paying'`;
+      throw new RoundError('Nothing in the pot to pay out', 500);
+    }
 
     const [payout] = await sql<Row[]>`
       insert into payouts (round_id, member_id, ccy, amount_minor, status)
@@ -270,7 +273,7 @@ export function makeRounds(deps: RoundsDeps) {
       if (!(e instanceof InsufficientPool)) throw e;
       // Invariant 3: refuse rather than overdraw.
       await sql`update payouts set status = 'failed' where id = ${payout.id}`;
-      await sql`update rounds set status = 'withheld' where id = ${round.id}`;
+      await sql`update rounds set status = 'withheld' where id = ${round.id} and status = 'paying'`;
       return;
     }
     const [recipient] = await sql<Row[]>`select * from members where id = ${round.recipient_member_id}`;
@@ -298,7 +301,7 @@ export function makeRounds(deps: RoundsDeps) {
       await ledger.postJournal('payout', { type: 'payout_reversal', id: j.ref_id }, reversalLines(original));
     }
     await sql`update payouts set status = 'failed' where id = ${payoutId}`;
-    await sql`update rounds set status = 'funded' where id = ${round.id}`;
+    await sql`update rounds set status = 'funded' where id = ${round.id} and status = 'paying'`;
   }
 
   /** Reconcile-on-read: bring the round up to date with every provider, then return nothing (read state after). */
@@ -317,9 +320,12 @@ export function makeRounds(deps: RoundsDeps) {
       select member_id from contributions
       where round_id = ${roundId} and status <> 'succeeded' and promised_for is not null and promised_for < ${today()}::date`;
     if (overdue.length) {
-      await sql`update rounds set status = 'withheld' where id = ${roundId}`;
-      await sql`update members set reputation_score = greatest(0, reputation_score - 50)
-                where id in ${sql(overdue.map((o) => o.member_id))}`;
+      const [withheld] = await sql<Row[]>`
+        update rounds set status = 'withheld' where id = ${roundId} and status in ('open', 'collecting') returning id`;
+      if (withheld) {
+        await sql`update members set reputation_score = greatest(0, reputation_score - 50)
+                  where id in ${sql(overdue.map((o) => o.member_id))}`;
+      }
       return;
     }
 
@@ -334,14 +340,18 @@ export function makeRounds(deps: RoundsDeps) {
         snap,
       );
       if (lines.length) await ledger.postJournal('conversion', { type: 'round', id: roundId }, lines);
-      await sql`update rounds set status = 'funded' where id = ${roundId}`;
+      await sql`update rounds set status = 'funded' where id = ${roundId} and status in ('open', 'collecting')`;
       round = await loadRound(roundId);
     }
 
-    // 4. Funded with no failed attempt: pay out from the recipient's own country pool.
+    // 4. Funded: the FIRST payout attempt is automatic; a failed one waits for an explicit retry.
+    //    If a payout already exists (a state only a race could leave), move the round to match it, never pay twice.
     if (round.status === 'funded') {
-      const [p] = await sql<Row[]>`select status from payouts where round_id = ${roundId}`;
-      if (!p || p.status !== 'failed') await initiatePayout(round, snap);
+      const [p] = await sql<Row[]>`select id, status, provider_ref from payouts where round_id = ${roundId}`;
+      if (!p) await initiatePayout(round, snap);
+      else if (p.status === 'succeeded') await markPaid(round, p.id, undefined);
+      else if (p.status === 'pending' && p.provider_ref)
+        await sql`update rounds set status = 'paying' where id = ${roundId} and status = 'funded'`;
       round = await loadRound(roundId);
     }
 

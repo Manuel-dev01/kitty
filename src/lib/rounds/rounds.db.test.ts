@@ -23,6 +23,7 @@ function fakeRails() {
   const payoutSilent = new Set<Country>(); // accepted, but never reports a result (Daraja B2C sandbox)
   let n = 0;
   const payoutCalls: Country[] = [];
+  let collectGate: Promise<void> | null = null; // when set, collectStatus waits on it (a slow provider)
   const rail = (country: Country): RailAdapter => ({
     country,
     currency: COUNTRY_CCY[country],
@@ -31,7 +32,11 @@ function fakeRails() {
       status.set(ref, collectAs.get(country) ?? 'succeeded');
       return { providerRef: ref, nextAction: { type: 'prompt_sent' } };
     },
-    collectStatus: async (ref) => status.get(ref) ?? 'pending',
+    collectStatus: async (ref) => {
+      const s = status.get(ref) ?? 'pending';
+      if (collectGate) await collectGate;
+      return s;
+    },
     async payout() {
       payoutCalls.push(country);
       if (payoutError.has(country)) throw payoutError.get(country);
@@ -43,7 +48,17 @@ function fakeRails() {
     payoutStatus: async (ref) => status.get(ref) ?? 'pending',
     parseWebhook: async () => null,
   });
-  return { rail, collectAs, payoutDown, payoutError, payoutSilent, payoutCalls };
+  return {
+    rail,
+    collectAs,
+    payoutDown,
+    payoutError,
+    payoutSilent,
+    payoutCalls,
+    gate(p: Promise<void> | null) {
+      collectGate = p;
+    },
+  };
 }
 
 describe.skipIf(!testDbUrl)('rounds engine in Postgres', () => {
@@ -270,6 +285,34 @@ describe.skipIf(!testDbUrl)('rounds engine in Postgres', () => {
       await Promise.all([rounds.reconcile(roundId!), rounds.reconcile(roundId!), rounds.reconcile(roundId!)]);
       expect(rails.payoutCalls).toEqual(['KE']);
       expect((await roundState(sql, rounds, roundId!))!.round.status).toBe('paid');
+    });
+
+    it('found live: a stale reconcile resuming after the round was paid cannot knock it back to funded', async () => {
+      const { roundId } = await resetDemo(sql, rounds, takeSnapshot);
+      await payAll(roundId!);
+      let release!: () => void;
+      rails.gate(new Promise<void>((r) => (release = r)));
+      const stale = rounds.reconcile(roundId!); // e.g. a 1.5 s poll: stuck on a slow provider status call
+      await new Promise((r) => setTimeout(r, 50));
+      rails.gate(null);
+      await rounds.reconcile(roundId!); // e.g. a provider webhook: settles, converts, pays out, confirms
+      expect((await roundState(sql, rounds, roundId!))!.round.status).toBe('paid');
+      release();
+      await stale; // resumes with its old view of the round ("collecting")
+      const s = (await roundState(sql, rounds, roundId!))!;
+      expect(s.round.status).toBe('paid');
+      expect(rails.payoutCalls).toEqual(['KE']);
+      await expect(rounds.reconcile(roundId!)).resolves.toBeUndefined(); // and later reads don't throw
+    });
+
+    it('heals a round left funded after its payout succeeded, without paying twice', async () => {
+      const { roundId } = await resetDemo(sql, rounds, takeSnapshot);
+      await payAll(roundId!);
+      await rounds.reconcile(roundId!);
+      await sql`update rounds set status = 'funded' where id = ${roundId}`; // the corrupted state seen in production
+      await rounds.reconcile(roundId!);
+      expect((await roundState(sql, rounds, roundId!))!.round.status).toBe('paid');
+      expect(rails.payoutCalls).toEqual(['KE']);
     });
 
     it('replay is used only when allowed, and only from a recorded REAL success', async () => {
