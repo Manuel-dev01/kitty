@@ -186,7 +186,7 @@ the residual is the FX drift, shown in the UI.
 
 ## 6. The treasurer agent
 
-Model from `KITTY_AGENT_MODEL` (`deepseek-chat`) via DeepSeek's OpenAI-compatible `POST https://api.deepseek.com/chat/completions` with `tools` (function calling), using plain `fetch` and `DEEPSEEK_API_KEY`. No SDK dependency. The safety rules below are provider-independent: they are enforced server-side, never by the model.
+Model from `KITTY_AGENT_MODEL` (`deepseek-v4-pro`) via DeepSeek's OpenAI-compatible `POST https://api.deepseek.com/chat/completions` with `tools` (function calling), using plain `fetch` and `DEEPSEEK_API_KEY`. No SDK dependency. The safety rules below are provider-independent: they are enforced server-side, never by the model.
 
 **Tools** (all server-side and scoped to the caller's circle; the agent never sees other circles):
 | Tool | Effect |
