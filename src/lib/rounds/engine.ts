@@ -32,6 +32,7 @@ import {
 import { pgStore } from '../ledger/pg-store';
 import { wholeShillings } from '../rails/daraja';
 import type { Member, RailAdapter, RailStatus } from '../rails/types';
+import type { SandboxLimits } from './sandbox-limits';
 
 export interface RoundsDeps {
   sql: Sql;
@@ -41,6 +42,8 @@ export interface RoundsDeps {
   takeSnapshot: () => Promise<FxSnapshot>;
   /** YYYY-MM-DD, for promise deadlines. */
   today?: () => string;
+  /** Documented sandbox limits that may complete a step by (labelled) simulation. Off when undefined. */
+  limits?: SandboxLimits;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -97,7 +100,7 @@ export function makeRounds(deps: RoundsDeps) {
 
   const contributionsOf = (roundId: string) => sql<Row[]>`
     select c.id, c.round_id, c.member_id, c.ccy, c.amount_minor, c.rail_amount_minor, c.rail_ccy, c.provider_ref,
-           c.status, c.promised_for, m.circle_id, m.name, m.country, m.phone, m.email, m.rail,
+           c.status, c.promised_for, c.simulated, m.circle_id, m.name, m.country, m.phone, m.email, m.rail,
            m.payout_position, m.reputation_score
     from contributions c join members m on m.id = c.member_id
     where c.round_id = ${roundId}
@@ -193,14 +196,16 @@ export function makeRounds(deps: RoundsDeps) {
     } catch {
       return; // provider unreachable: stays pending, the next read tries again
     }
-    if (status === 'pending') return;
-    if (status === 'failed') {
+    // A documented sandbox limit may complete this step, but only after the real call above, and labelled.
+    const simulated = status === 'succeeded' ? null : (deps.limits?.collect(toMember(c), status) ?? null);
+    if (!simulated && status === 'pending') return;
+    if (!simulated && status === 'failed') {
       await sql`update contributions set status = 'failed' where id = ${c.id} and status = 'pending'`;
       return;
     }
     const amount = BigInt(c.amount_minor);
     const collected = (adapter as Partial<{ collectedAmount(ref: string): Promise<bigint> }>).collectedAmount;
-    if (collected && (await collected.call(adapter, c.provider_ref)) < amount) {
+    if (!simulated && collected && (await collected.call(adapter, c.provider_ref)) < amount) {
       await sql`update contributions set status = 'failed' where id = ${c.id}`; // short payment
       return;
     }
@@ -211,7 +216,14 @@ export function makeRounds(deps: RoundsDeps) {
       { type: 'contribution', id: c.id },
       contributionLines(round.circle_id, COUNTRY_RAIL[country], c.ccy as Ccy, amount, received),
     );
-    await sql`update contributions set status = 'succeeded' where id = ${c.id}`;
+    await sql`update contributions set status = 'succeeded', simulated = ${simulated} where id = ${c.id}`;
+  }
+
+  async function markPaid(round: Row, payoutId: string, simulated: string | null = null) {
+    await sql`update payouts set status = 'succeeded', simulated = ${simulated} where id = ${payoutId}`;
+    await sql`update rounds set status = 'paid' where id = ${round.id}`;
+    const [{ n }] = await sql<Row[]>`select count(*)::int as n from members where circle_id = ${round.circle_id}`;
+    if (round.index >= n) await sql`update circles set status = 'completed' where id = ${round.circle_id}`;
   }
 
   async function initiatePayout(round: Row, snap: FxSnapshot) {
@@ -245,8 +257,12 @@ export function makeRounds(deps: RoundsDeps) {
     try {
       const res = await deps.rail(country, snap).payout({ payoutId: payout.id, member: toMember(recipient), amountMinor: pot });
       await sql`update payouts set provider_ref = ${res.providerRef} where id = ${payout.id}`;
-    } catch {
-      await reversePayout(round, payout.id, ref.id);
+    } catch (e) {
+      // A documented sandbox limit (e.g. Paystack Starter accounts can't transfer) completes the payout,
+      // labelled. The journal stands. Anything else is reversed and waits for an explicit retry.
+      const simulated = deps.limits?.payout(toMember(recipient), e) ?? null;
+      if (simulated) await markPaid(round, payout.id, simulated);
+      else await reversePayout(round, payout.id, ref.id);
     }
   }
 
@@ -320,10 +336,7 @@ export function makeRounds(deps: RoundsDeps) {
         return;
       }
       if (status === 'succeeded') {
-        await sql`update payouts set status = 'succeeded' where id = ${p.id}`;
-        await sql`update rounds set status = 'paid' where id = ${roundId}`;
-        const [{ n }] = await sql<Row[]>`select count(*)::int as n from members where circle_id = ${round.circle_id}`;
-        if (round.index >= n) await sql`update circles set status = 'completed' where id = ${round.circle_id}`;
+        await markPaid(round, p.id);
       } else if (status === 'failed') {
         await reversePayout(round, p.id);
       }

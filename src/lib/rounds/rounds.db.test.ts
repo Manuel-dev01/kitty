@@ -8,7 +8,8 @@ import type { FxSnapshot } from '@/lib/fx/types';
 import { COUNTRY_CCY, COUNTRY_RAIL, CURRENCIES, cashAccount, fxPosition, fxRounding, type Country } from '@/lib/ledger';
 import type { RailAdapter, RailStatus } from '@/lib/rails/types';
 import { freshSchema, testDbUrl } from '@/test/pg';
-import { makeRounds, resetDemo, roundState, type Rounds } from '.';
+import { ProviderError } from '@/lib/rails/http';
+import { makeRounds, resetDemo, roundState, sandboxLimits, type Rounds } from '.';
 import { handleProviderEvent } from './webhooks';
 
 const RATES = { NGN: '1532.456789', KES: '129.3417', UGX: '3712.345678', GHS: '11.87654', EUR: '0.8612' };
@@ -18,6 +19,7 @@ function fakeRails() {
   const status = new Map<string, RailStatus>();
   const collectAs = new Map<Country, RailStatus>();
   const payoutDown = new Set<Country>();
+  const payoutError = new Map<Country, unknown>();
   let n = 0;
   const rail = (country: Country): RailAdapter => ({
     country,
@@ -29,6 +31,7 @@ function fakeRails() {
     },
     collectStatus: async (ref) => status.get(ref) ?? 'pending',
     async payout() {
+      if (payoutError.has(country)) throw payoutError.get(country);
       if (payoutDown.has(country)) throw new Error(`${country} rail down`);
       const ref = `fake-p-${++n}`;
       status.set(ref, 'succeeded');
@@ -37,7 +40,7 @@ function fakeRails() {
     payoutStatus: async (ref) => status.get(ref) ?? 'pending',
     parseWebhook: async () => null,
   });
-  return { rail, collectAs, payoutDown };
+  return { rail, collectAs, payoutDown, payoutError };
 }
 
 describe.skipIf(!testDbUrl)('rounds engine in Postgres', () => {
@@ -177,5 +180,50 @@ describe.skipIf(!testDbUrl)('rounds engine in Postgres', () => {
     expect(b).toEqual({ duplicate: true, roundId });
     expect(await sql`select 1 from provider_events`).toHaveLength(1);
     expect((await roundState(sql, rounds, roundId!))!.round.status).toBe('paid');
+  });
+
+  describe('documented sandbox limits (labelled simulation)', () => {
+    beforeEach(() => {
+      rounds = makeRounds({ sql, rail: (country) => rails.rail(country), takeSnapshot, today: () => '2026-09-27', limits: sandboxLimits });
+    });
+
+    it('Kenya on the Daraja test number: the real push is made, approval is simulated and labelled', async () => {
+      const { roundId } = await resetDemo(sql, rounds, takeSnapshot);
+      rails.collectAs.set('KE', 'failed'); // what the sandbox really returns: 1037, no phone to enter a PIN
+      await payAll(roundId!);
+      await rounds.reconcile(roundId!);
+      const s = (await roundState(sql, rounds, roundId!))!;
+      const ke = s.contributions.find((c) => c.member.country === 'KE')!;
+      expect(ke.status).toBe('succeeded');
+      expect(ke.providerRef).toMatch(/^fake-c-/); // the real attempt's reference is kept
+      expect(ke.simulated).toMatch(/Daraja sandbox.*test number/);
+      expect(s.contributions.filter((c) => c.simulated)).toHaveLength(1); // nothing else is simulated
+      expect(s.round.status).toBe('paid');
+    });
+
+    it('Nigeria payout on a Starter Paystack account: simulated and labelled, journal stands', async () => {
+      const { circleId, roundId } = await resetDemo(sql, rounds, takeSnapshot);
+      rails.payoutError.set('NG', new ProviderError('paystack', 'payout', 400, { code: 'transfer_unavailable' }));
+      await payAll(roundId!);
+      await rounds.reconcile(roundId!); // round 1 pays Nairobi for real
+      const r2 = (await rounds.openNextRound(circleId))!;
+      await payAll(r2);
+      await rounds.reconcile(r2);
+      const s = (await roundState(sql, rounds, r2))!;
+      expect(s.round.recipient.country).toBe('NG');
+      expect(s.round.status).toBe('paid');
+      expect(s.payout).toMatchObject({ status: 'succeeded', simulated: expect.stringMatching(/Starter business/) });
+      expect(s.journals.filter((j) => j.ref.type === 'payout_reversal')).toHaveLength(0);
+    });
+
+    it('any other failure is NOT simulated: a real payout error is still reversed', async () => {
+      const { roundId } = await resetDemo(sql, rounds, takeSnapshot);
+      rails.payoutError.set('KE', new ProviderError('daraja', 'payout', 500, { errorCode: 'boom' }));
+      await payAll(roundId!);
+      await rounds.reconcile(roundId!);
+      const s = (await roundState(sql, rounds, roundId!))!;
+      expect(s.round.status).toBe('funded');
+      expect(s.payout).toMatchObject({ status: 'failed', simulated: null });
+    });
   });
 });

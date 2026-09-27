@@ -36,7 +36,7 @@ Judges are industry experts **and employers**, so the repo is read like a portfo
 - ✅ Role A (rails + rounds): Paystack, Daraja and MoMo adapters are verified against the live sandboxes (`npm run test:live`).
   The rounds engine is in `lib/rounds`. `GET /api/rounds/:id` reconciles on read, the webhooks record `provider_events` first,
   and `POST /api/demo` resets the judge circle. The engine's full-cycle test on Postgres ends on "Moved $800 · Crossed a border $0".
-- ⚠️ Live limits found (the demo must design around them):
+- ⚠️ Live limits found. Both are handled by labelled simulation (see Hard constraints):
   - **Daraja sandbox:** the test MSISDN 254708374149 never approves an STK push (it ends in `1037` "No response from user"),
     so a Kenyan contribution can't succeed live without a real phone.
   - **Paystack:** payouts are refused on a Starter business ("You cannot initiate third party payouts as a starter business").
@@ -52,6 +52,9 @@ Judges are industry experts **and employers**, so the repo is read like a portfo
 - **Webhooks are idempotent** (`provider_events` primary key) and **signature-verified**. Reconcile-on-read polling is the primary path; webhooks only speed it up.
 - **The LLM never moves money.** It never sets amounts, and every money action is `prepare_payment` → member says yes → `confirm_payment`.
 - **Replay is never silent.** Any step served from recorded fixtures shows a `replay` badge.
+- **Simulation is never silent, and only for documented sandbox limits** (`src/lib/rounds/sandbox-limits.ts`: the Daraja test MSISDN
+  can't approve an STK push; a Paystack Starter account can't transfer). The real call is always made first and its reference kept.
+  The step's `simulated` reason is stored and returned by the API, and the UI shows a `simulated · sandbox limit` badge. Never add a case without a live finding.
 - Keep dependencies minimal and use `npm`. The lead's machine is on slow bandwidth.
 - **Scaffold by hand.** `create-next-app` refuses this folder because it already contains docs. Write `package.json`, `tsconfig.json`
   and `next.config.ts` directly, then `npm i next react react-dom`.

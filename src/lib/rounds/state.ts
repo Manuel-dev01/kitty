@@ -59,9 +59,18 @@ export async function roundState(sql: Sql, rounds: Rounds, roundId: string) {
       status: c.status,
       promisedFor: c.promised_for,
       railNote: c.rail === 'momo' ? 'MoMo sandbox · settles in EUR' : null,
+      /** Non-null when a documented sandbox limit completed this step: show a `simulated · sandbox limit` badge. */
+      simulated: c.simulated as string | null,
     })),
     payout: payout
-      ? { id: payout.id, status: payout.status, ccy: payout.ccy, amountMinor: BigInt(payout.amount_minor), providerRef: payout.provider_ref }
+      ? {
+          id: payout.id,
+          status: payout.status,
+          ccy: payout.ccy,
+          amountMinor: BigInt(payout.amount_minor),
+          providerRef: payout.provider_ref,
+          simulated: payout.simulated as string | null,
+        }
       : null,
     journals: journals.map((j) => ({ id: j.id, kind: j.kind, ref: { type: j.ref_type, id: j.ref_id }, createdAt: j.created_at, lines: j.lines })),
     netting: { ...report, headline: headline(report) },

@@ -133,3 +133,26 @@ describe('callback secrets and redaction', () => {
     });
   });
 });
+
+describe('sandbox limits: only the two documented cases qualify', async () => {
+  const { sandboxLimits } = await import('../rounds/sandbox-limits');
+  const { ProviderError } = await import('./http');
+  const m = (country: 'KE' | 'NG' | 'UG', phone: string) =>
+    ({ id: 'm', circleId: 'c', name: 'x', country, phone, email: null, rail: 'daraja', payoutPosition: 1, reputationScore: 1 }) as const;
+
+  it('Daraja: only the sandbox test MSISDN, only when not succeeded', () => {
+    expect(sandboxLimits.collect(m('KE', '254708374149'), 'failed')).toMatch(/test number/);
+    expect(sandboxLimits.collect(m('KE', '+254 708 374 149'), 'pending')).toMatch(/test number/);
+    expect(sandboxLimits.collect(m('KE', '254708374149'), 'succeeded')).toBeNull();
+    expect(sandboxLimits.collect(m('KE', '254711000000'), 'failed')).toBeNull(); // a real phone is never simulated
+    expect(sandboxLimits.collect(m('UG', '256772123456'), 'failed')).toBeNull();
+  });
+
+  it('Paystack: only transfer_unavailable on a Nigerian payout', () => {
+    const starter = new ProviderError('paystack', 'payout', 400, { code: 'transfer_unavailable' });
+    expect(sandboxLimits.payout(m('NG', ''), starter)).toMatch(/Starter business/);
+    expect(sandboxLimits.payout(m('NG', ''), new ProviderError('paystack', 'payout', 400, { code: 'insufficient_balance' }))).toBeNull();
+    expect(sandboxLimits.payout(m('NG', ''), new Error('network'))).toBeNull();
+    expect(sandboxLimits.payout(m('KE', ''), starter)).toBeNull();
+  });
+});
