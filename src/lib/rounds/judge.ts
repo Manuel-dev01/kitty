@@ -27,7 +27,7 @@ export async function judgeAdvance(sql: Sql, rounds: Rounds, circleId: string, o
   const started = await Promise.all(
     pending.map(async (c) => {
       try {
-        const r = await rounds.startCollection(c.id);
+        const r = await rounds.startCollection(c.id, { preferSaved: opts.auto === true });
         return { contributionId: c.id, country: c.country as string, providerRef: r.providerRef, nextAction: r.nextAction };
       } catch (e) {
         return { contributionId: c.id, country: c.country as string, error: (e as Error).message };

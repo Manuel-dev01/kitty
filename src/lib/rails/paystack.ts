@@ -2,8 +2,11 @@
  * Paystack (NG, NGN, test mode).
  * collect = transaction/initialize → checkout link · status = transaction/verify (source of truth)
  * payout  = transferrecipient + transfer · webhook = HMAC-SHA512 of the RAW body with the secret key.
+ * saved card: a real successful checkout yields a reusable authorization; later collections can charge it
+ * server-side (transaction/charge_authorization), a real test-mode charge rather than a replayed response.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { getSql } from '../db';
 import { providerFetch, requireEnv } from './http';
 import type { Member, NormalizedEvent, RailAdapter, RailStatus } from './types';
 
@@ -41,13 +44,58 @@ export function mapTransferStatus(s: string): RailStatus {
   return 'pending'; // pending, otp, processing, queued
 }
 
+type Authorization = { authorization_code?: string; reusable?: boolean; card_type?: string; last4?: string; exp_month?: string; exp_year?: string };
+
+const cardLabel = (a: Authorization) => `${(a.card_type ?? 'card').trim()} ····${a.last4 ?? '????'} ${a.exp_month ?? ''}/${a.exp_year ?? ''}`.trim();
+
+/** Remember a reusable authorization from a REAL successful charge (best effort: never breaks a payment). */
+async function learnAuthorization(email: string | undefined, a: Authorization | undefined, ref: string) {
+  if (!email || !a?.reusable || !a.authorization_code || !process.env.DATABASE_URL) return;
+  try {
+    await getSql()`
+      insert into saved_authorizations (provider, email, authorization_code, card, source_ref)
+      values ('paystack', ${email}, ${a.authorization_code}, ${cardLabel(a)}, ${ref})
+      on conflict (provider, email) do update set authorization_code = excluded.authorization_code, card = excluded.card,
+        source_ref = excluded.source_ref, created_at = now()`;
+  } catch (e) {
+    console.warn('could not save Paystack authorization:', (e as Error).message);
+  }
+}
+
+/**
+ * The member's saved card, if a real checkout ever produced a reusable one. Falls back to the recorded real
+ * verify responses in provider_calls (so a card learned before this table existed is not lost).
+ */
+export async function savedAuthorization(email: string): Promise<{ code: string; card: string } | null> {
+  if (!process.env.DATABASE_URL) return null;
+  const sql = getSql();
+  const [row] = await sql<{ authorization_code: string; card: string }[]>`
+    select authorization_code, card from saved_authorizations where provider = 'paystack' and email = ${email}`;
+  if (row) return { code: row.authorization_code, card: row.card };
+  const [rec] = await sql<{ a: Authorization; ref: string }[]>`
+    select response->'data'->'authorization' as a, response->'data'->>'reference' as ref
+    from provider_calls
+    where provider = 'paystack' and op in ('verify', 'collectStatus') and status_code = 200
+      and response->'data'->>'status' = 'success'
+      and response->'data'->'customer'->>'email' = ${email}
+      and (response->'data'->'authorization'->>'reusable')::boolean
+    order by id desc limit 1`;
+  if (!rec?.a?.authorization_code) return null;
+  await learnAuthorization(email, rec.a, rec.ref);
+  return { code: rec.a.authorization_code, card: cardLabel(rec.a) };
+}
+
 /** Status plus the amount Paystack actually charged, so reconciliation can refuse a short payment. */
 export async function verifyCharge(reference: string) {
-  const data = await call<{ status: string; amount: number; currency: string; reference: string }>(
-    'verify',
-    'GET',
-    `/transaction/verify/${encodeURIComponent(reference)}`,
-  );
+  const data = await call<{
+    status: string;
+    amount: number;
+    currency: string;
+    reference: string;
+    authorization?: Authorization;
+    customer?: { email?: string };
+  }>('verify', 'GET', `/transaction/verify/${encodeURIComponent(reference)}`);
+  if (data.status === 'success') await learnAuthorization(data.customer?.email, data.authorization, reference);
   return { status: mapChargeStatus(data.status), amountMinor: BigInt(data.amount), currency: data.currency, raw: data.status };
 }
 
@@ -72,11 +120,25 @@ export const paystack: RailAdapter & { collectedAmount(reference: string): Promi
     return (await verifyCharge(reference)).amountMinor;
   },
 
-  async collect({ contributionId, member, amountMinor }) {
+  async collect({ contributionId, member, amountMinor, preferSaved }) {
     const reference = paystackReference('ctb', contributionId);
+    const email = member.email || `kitty+${member.id.slice(0, 8)}@example.com`;
+    // Judge mode ("Run full cycle") has nobody at a checkout: charge the member's saved card for real.
+    const saved = preferSaved ? await savedAuthorization(email) : null;
+    if (saved) {
+      const charged = await call<{ reference: string; status: string }>('collect', 'POST', '/transaction/charge_authorization', {
+        authorization_code: saved.code,
+        email,
+        amount: amountMinor.toString(),
+        currency: 'NGN',
+        reference,
+        metadata: { contributionId, memberId: member.id, circleId: member.circleId, savedCard: saved.card },
+      });
+      return { providerRef: charged.reference ?? reference };
+    }
     const base = process.env.PUBLIC_BASE_URL?.replace(/\/$/, '') ?? '';
     const data = await call<{ authorization_url: string; reference: string }>('collect', 'POST', '/transaction/initialize', {
-      email: member.email || `kitty+${member.id.slice(0, 8)}@example.com`,
+      email,
       amount: amountMinor.toString(), // kobo
       currency: 'NGN',
       reference,

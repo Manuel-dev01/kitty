@@ -165,7 +165,7 @@ export function makeRounds(deps: RoundsDeps) {
   }
 
   /** Starts (or restarts) a member's payment on their own rail. */
-  async function startCollection(contributionId: string) {
+  async function startCollection(contributionId: string, opts: { preferSaved?: boolean } = {}) {
     const [c] = await sql<Row[]>`
       select c.*, m.circle_id, m.name, m.country, m.phone, m.email, m.rail, m.payout_position, m.reputation_score,
              r.status as round_status, r.fx_snapshot_id
@@ -177,7 +177,7 @@ export function makeRounds(deps: RoundsDeps) {
 
     const snap = await snapshotById(c.fx_snapshot_id);
     const amount = BigInt(c.amount_minor);
-    const res = await deps.rail(c.country, snap).collect({ contributionId, member: toMember(c), amountMinor: amount });
+    const res = await deps.rail(c.country, snap).collect({ contributionId, member: toMember(c), amountMinor: amount, preferSaved: opts.preferSaved });
     const onRail = railAmount(c.country, amount, snap);
     await sql`update contributions set provider_ref = ${res.providerRef}, status = 'pending',
               rail_amount_minor = ${onRail.minor.toString()}, rail_ccy = ${onRail.ccy} where id = ${contributionId}`;

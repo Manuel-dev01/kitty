@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ProviderError } from './http';
-import { paystack, verifyCharge } from './paystack';
+import { paystack, savedAuthorization, verifyCharge } from './paystack';
 import type { Member } from './types';
 
 const tunde: Member = {
@@ -47,5 +47,19 @@ describe('Paystack sandbox (live)', () => {
     const status = await paystack.payoutStatus(res.providerRef);
     console.log('Paystack transfer status:', status);
     expect(['pending', 'succeeded']).toContain(status);
+  });
+});
+
+describe('Paystack saved card (live)', () => {
+  it('learns the reusable authorization from a real checkout and charges it server-side, for real', async () => {
+    // A real test-card checkout completed in the browser on 2026-09-27.
+    expect((await verifyCharge('kitty-ctb-2a5abd64baf445448e44b701-muk1zeyn')).status).toBe('succeeded');
+    const saved = await savedAuthorization('tunde.kitty@example.com');
+    expect(saved?.card).toMatch(/····4081/);
+    const res = await paystack.collect({ contributionId: crypto.randomUUID(), member: tunde, amountMinor: 6_636_510n, preferSaved: true });
+    console.log('Paystack saved-card charge:', res.providerRef);
+    expect(res.nextAction).toBeUndefined(); // no checkout needed
+    const v = await verifyCharge(res.providerRef);
+    expect(v).toMatchObject({ status: 'succeeded', amountMinor: 6_636_510n, currency: 'NGN' });
   });
 });

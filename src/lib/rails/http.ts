@@ -102,11 +102,13 @@ export async function providerFetch<T = unknown>(req: ProviderRequest): Promise<
 }
 
 /** Our public callback URL for a provider, carrying the shared secret (Daraja and MoMo can't sign callbacks). */
-export function callbackUrl(path: string): string {
+export function callbackUrl(path: string, opts: { tokenInPath?: boolean } = {}): string {
   const base = process.env.PUBLIC_BASE_URL;
   const secret = process.env.KITTY_WEBHOOK_SECRET;
   if (!base || !secret) throw new Error('PUBLIC_BASE_URL and KITTY_WEBHOOK_SECRET must be set');
-  return `${base.replace(/\/$/, '')}${path}?t=${encodeURIComponent(secret)}`;
+  const root = `${base.replace(/\/$/, '')}${path}`;
+  // tokenInPath: Daraja's sandbox delivered STK callbacks but no B2C results to a URL with a query string.
+  return opts.tokenInPath ? `${root}/${encodeURIComponent(secret)}` : `${root}?t=${encodeURIComponent(secret)}`;
 }
 
 /**
@@ -115,7 +117,8 @@ export function callbackUrl(path: string): string {
  */
 export function hasValidCallbackToken(requestUrl: string): boolean {
   const secret = process.env.KITTY_WEBHOOK_SECRET;
-  const given = new URL(requestUrl).searchParams.get('t');
+  const url = new URL(requestUrl);
+  const given = url.searchParams.get('t') ?? decodeURIComponent(url.pathname.split('/').pop() ?? ''); // query, or last path segment
   if (!secret || !given) return false;
   const a = Buffer.from(given);
   const b = Buffer.from(secret);

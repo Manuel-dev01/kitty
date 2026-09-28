@@ -27,11 +27,12 @@ export interface NormalizedEvent {
   payload: unknown;
 }
 
-/** docs/ARCHITECTURE.md §2, verbatim. */
+/** docs/ARCHITECTURE.md §2 (plus the optional preferSaved flag for saved-card charges). */
 export interface RailAdapter {
   country: Country;
   currency: Ccy;
-  collect(req: { contributionId: string; member: Member; amountMinor: bigint }):
+  // preferSaved: judge mode may charge a card the member saved in an earlier real checkout (Paystack only).
+  collect(req: { contributionId: string; member: Member; amountMinor: bigint; preferSaved?: boolean }):
     Promise<{ providerRef: string; nextAction?: { type: 'redirect'; url: string } | { type: 'prompt_sent' } }>;
   collectStatus(providerRef: string): Promise<'pending' | 'succeeded' | 'failed'>;
   payout(req: { payoutId: string; member: Member; amountMinor: bigint }): Promise<{ providerRef: string }>;

@@ -162,3 +162,15 @@ describe('sandbox limits: only the two documented cases qualify', async () => {
     expect(sandboxLimits.payoutUnconfirmed(m('UG', ''), 3600)).toBeNull(); // MoMo has a real status query
   });
 });
+
+describe('callback secret in the path (Daraja B2C)', () => {
+  it('accepts the exact secret as the last path segment, and nothing else', async () => {
+    const { hasValidCallbackToken } = await import('./http');
+    const saved = process.env.KITTY_WEBHOOK_SECRET;
+    process.env.KITTY_WEBHOOK_SECRET = 'path-secret-123456';
+    expect(hasValidCallbackToken('https://x/api/webhooks/daraja/b2c/path-secret-123456')).toBe(true);
+    expect(hasValidCallbackToken('https://x/api/webhooks/daraja/b2c/path-secret-12345')).toBe(false);
+    expect(hasValidCallbackToken('https://x/api/webhooks/daraja/b2c')).toBe(false);
+    process.env.KITTY_WEBHOOK_SECRET = saved;
+  });
+});
