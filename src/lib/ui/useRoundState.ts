@@ -28,13 +28,15 @@ export function useRoundState(roundId: string | null, intervalMs = 1500) {
     const timer = setTimeout(() => ctrl.abort(), POLL_TIMEOUT_MS);
     try {
       const res = await fetch(`/api/rounds/${roundId}`, { cache: 'no-store', signal: ctrl.signal });
-      const body = await res.json().catch(() => ({}));
+      // A body cut short (e.g. the timeout fired mid-read) is an error, never an empty state.
+      const body = await res.json().catch(() => null);
       if (current.current !== roundId) return latest.current; // the page moved on to another round
       if (res.status === 404) {
         setGone(true);
         return latest.current;
       }
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
+      if (!body?.round || !Array.isArray(body.contributions)) throw new Error('The server sent an incomplete answer; retrying…');
       latest.current = body as RoundState;
       setState(body as RoundState);
       setError(body.reconcileError ? `Some providers didn't answer: ${body.reconcileError}` : null);
