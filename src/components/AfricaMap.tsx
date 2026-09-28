@@ -79,6 +79,7 @@ export function AfricaMap({ state }: { state: RoundState | null }) {
         return (
           <g key={c}>
             {k?.status === 'pending' && <circle className="pulse" cx={x} cy={y} r={14} fill={color} />}
+            {landed && <circle key={`ripple-${k?.id}`} className="ripple" cx={x} cy={y} r={16} fill="none" stroke={color} strokeWidth={4} />}
             {isRecipient && paidOut && <circle className="burst" cx={x} cy={y} r={16} fill="var(--gold)" />}
             {isRecipient && <circle cx={x} cy={y} r={21} fill="none" stroke="var(--gold)" strokeWidth={4} />}
             <circle

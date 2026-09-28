@@ -1,6 +1,7 @@
 import { COUNTRY, fmtMinor, fmtUsd } from '@/lib/ui/format';
 import type { RoundState } from '@/lib/ui/types';
 import { Flag } from './Flag';
+import { CountUp } from './motion';
 
 /** "Moved $X · Crossed a border $Y (Z%)", against what naive remittance would have sent. */
 export function NettingMeter({ netting }: { netting: RoundState['netting'] }) {
@@ -11,7 +12,10 @@ export function NettingMeter({ netting }: { netting: RoundState['netting'] }) {
   return (
     <div className="meter">
       <div className="headline num">
-        Moved {fmtUsd(netting.movedUsdCents)} · <span className="x">Crossed a border {fmtUsd(netting.netCrossBorderUsdCents)}</span>{' '}
+        Moved <CountUp value={netting.movedUsdCents} ccy="USD" dropZeroCents /> ·{' '}
+        <span className="x">
+          Crossed a border <CountUp value={netting.netCrossBorderUsdCents} ccy="USD" dropZeroCents />
+        </span>{' '}
         <span className="muted" style={{ fontWeight: 600 }}>({netting.crossedPct}%)</span>
       </div>
       <div className="bar" aria-label="Net crossing a border, share of money moved">
@@ -64,7 +68,8 @@ export function ProofBanner({ state }: { state: RoundState }) {
         Full cycle complete · Invariant 2
       </div>
       <div className="big num">
-        Moved {fmtUsd(state.netting.movedUsdCents)} · Net crossed a border: {fmtUsd(state.netting.netCrossBorderUsdCents)}
+        Moved {fmtUsd(state.netting.movedUsdCents)} · Net crossed a border:{' '}
+        <CountUp value={state.netting.netCrossBorderUsdCents} from={state.netting.grossCrossBorderUsdCents} ccy="USD" dropZeroCents durationMs={1800} />
       </div>
       <div className="zeros">
         {Object.entries(r).map(([ccy, v]) => (

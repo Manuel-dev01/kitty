@@ -8,9 +8,10 @@
 .left { display: flex; align-items: center; gap: 8px; }
 .title { margin: 0; font: 700 24px/1.1 var(--k-display); letter-spacing: -0.02em; }
 .meta { font-size: 14px; color: var(--k-muted); }
-.tabs { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--k-line); }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--k-line); position: relative; }
+.tabBar { position: absolute; left: 0; bottom: -1px; width: calc(100% / 3); height: 2.5px; background: var(--k-ink); transform: translateX(calc(var(--tab, 0) * 100%)); transition: transform 0.35s var(--k-ease); }
 .tab { height: 44px; display: flex; align-items: center; justify-content: center; gap: 6px; font: 500 15px var(--k-body); color: var(--k-muted); background: none; border: 0; border-bottom: 2.5px solid transparent; cursor: pointer; }
-.tabOn { font-weight: 700; color: var(--k-ink); border-bottom-color: var(--k-ink); }
+.tabOn { font-weight: 700; color: var(--k-ink); }
 .tabDot { width: 7px; height: 7px; border-radius: 50%; background: var(--k-accent); }
 
 .dNav { display: none; }
@@ -161,3 +162,21 @@
 }
 @media (max-width: 1023px) { .hideMob { display: none !important; } }
 @media (prefers-reduced-motion: reduce) { .shimmer, .spinner { animation: none; } }
+
+/* Motion */
+.main > * { animation: k-fade-up 0.55s var(--k-ease) both; }
+.main > *:nth-child(2) { animation-delay: 60ms; }
+.main > *:nth-child(3) { animation-delay: 120ms; }
+.main > *:nth-child(4) { animation-delay: 180ms; }
+.main > *:nth-child(5) { animation-delay: 240ms; }
+.main > *:nth-child(6) { animation-delay: 300ms; }
+.segOn { transform-origin: left; animation: k-grow 0.5s var(--k-ease) both; }
+.bigAvatar { transition: transform 0.3s var(--k-ease); }
+.celebrate { animation: celebrate 1.6s var(--k-ease); }
+.celebrate .bigAvatar { transform: scale(1.08); }
+@keyframes celebrate { 0% { box-shadow: 0 0 0 0 rgba(21, 95, 52, 0.35); } 100% { box-shadow: 0 0 0 18px rgba(21, 95, 52, 0); } }
+.row { transition: background-color 0.3s ease; }
+.card, .list { transition: box-shadow 0.25s ease; }
+.menuItem { transition: background-color 0.15s ease; }
+.payBtn { transition: transform 0.15s ease, background-color 0.2s ease; }
+@media (prefers-reduced-motion: reduce) { .main > *, .segOn, .celebrate { animation: none; } .tabBar { transition: none; } }

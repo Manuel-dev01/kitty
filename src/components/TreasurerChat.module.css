@@ -55,3 +55,11 @@
   .foot { padding: 12px 16px 16px; }
 }
 @media (prefers-reduced-motion: reduce) { .dots::after { animation: none; } }
+
+/* Motion */
+.them, .me, .announce, .started { animation: k-slide-in 0.3s var(--k-ease) both; }
+.confirm { animation: k-pop 0.45s var(--k-ease) both; }
+.lang { transition: background-color 0.25s ease, color 0.25s ease; }
+.chip, .yes, .no, .send { transition: transform 0.15s ease, border-color 0.2s ease, opacity 0.2s ease; }
+.chip:active:not(:disabled), .yes:active:not(:disabled), .no:active:not(:disabled), .send:active:not(:disabled) { transform: scale(0.96); }
+@media (prefers-reduced-motion: reduce) { .them, .me, .announce, .started, .confirm { animation: none; } }

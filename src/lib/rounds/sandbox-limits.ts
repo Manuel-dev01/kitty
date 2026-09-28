@@ -10,7 +10,8 @@
  *   as a starter business", code transfer_unavailable). Collection works; payouts to Nigeria cannot.
  * - Daraja B2C: the payment request is accepted (ResponseCode 0) but the sandbox did not deliver the
  *   result callback (none arrived in 6+ minutes, while Paystack's webhook did), and B2C has no status
- *   query. Without the callback a round could never leave "paying".
+ *   query. Without the callback a round could never leave "paying". Re-tested 2026-09-28 with the secret in the
+ *   URL path instead of the query string: still no B2C result delivered, so this limit stands.
  */
 import { msisdn } from '../rails/daraja';
 import { ProviderError } from '../rails/http';

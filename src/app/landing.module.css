@@ -184,3 +184,16 @@
 .mTotal { padding: 14px; background: var(--k-ink); color: var(--k-on-ink); font: 700 16px var(--k-body); }
 
 @media (prefers-reduced-motion: reduce) { .live { animation: none; } }
+
+/* Motion */
+.march { animation: k-march 1.6s linear infinite; }
+.floaty { animation: k-float 6s ease-in-out infinite; animation-delay: calc(var(--k-i, 0) * -1.5s); }
+.disc { animation: disc-in 0.8s var(--k-ease) 0.3s both; }
+@keyframes disc-in { 0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; } 60% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1); } }
+.city { transition: box-shadow 0.25s ease; }
+.city:hover { box-shadow: 0 12px 30px rgba(28, 25, 21, 0.12); }
+.card { transition: transform 0.25s var(--k-ease), box-shadow 0.25s ease; }
+.card:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(28, 25, 21, 0.08); }
+.gets { transition: transform 0.25s var(--k-ease); }
+.gets:hover { transform: scale(1.04); }
+@media (prefers-reduced-motion: reduce) { .march, .floaty, .disc { animation: none; } }

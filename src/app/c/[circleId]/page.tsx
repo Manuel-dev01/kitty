@@ -10,6 +10,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { LedgerPanel } from '@/components/LedgerPanel';
 import { Logo, ProofBadges, RefChip, SandboxPill, StatusPill, monoNote, type PillKind } from '@/components/brand';
 import { Flag } from '@/components/Flag';
+import { CountUp, useChanged } from '@/components/motion';
 import { TreasurerChat } from '@/components/TreasurerChat';
 import { COUNTRY, fmtMinor, fmtUsd } from '@/lib/ui/format';
 import type { Contribution, Country, RoundState } from '@/lib/ui/types';
@@ -172,7 +173,7 @@ function CircleHome() {
         {initials(viewer.name)}
       </button>
       {menu && (
-        <div className={s.menu} role="menu">
+        <div className={`${s.menu} k-pop`} role="menu">
           <div className={s.menuLabel}>DEMO · VIEW THE CIRCLE AS</div>
           {members.map((m) => (
             <button key={m.id} type="button" role="menuitem" className={`${s.menuItem} ${m.id === viewer.id ? s.menuOn : ''}`} onClick={() => setViewer(m.id)}>
@@ -207,7 +208,8 @@ function CircleHome() {
           <h1 className={s.title}>{circleName}</h1>
           <div className={s.meta}>{meta}</div>
         </div>
-        <div className={s.tabs} role="tablist">
+        <div className={s.tabs} role="tablist" style={{ ['--tab' as string]: ['circle', 'treasurer', 'ledger'].indexOf(tab) }}>
+          <span className={s.tabBar} aria-hidden="true" />
           {(['circle', 'treasurer', 'ledger'] as const).map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} className={`${s.tab} ${tab === t ? s.tabOn : ''}`} onClick={() => setTab(t)}>
               {t[0].toUpperCase() + t.slice(1)}
@@ -304,7 +306,7 @@ function CircleHome() {
                   const isRecipient = c.member.id === state.round.recipient.id;
                   const past = paidRounds.find((r) => r.recipientMemberId === c.member.id);
                   return (
-                    <div key={c.id} className={`${s.row} ${isYou ? s.rowYou : ''}`}>
+                    <FlashRow key={c.id} status={c.status} className={`${s.row} ${isYou ? s.rowYou : ''}`}>
                       <div className={s.who}>
                         <div className={s.whoTop}>
                           <span className={s.pos}>{c.member.payoutPosition}</span>
@@ -322,13 +324,13 @@ function CircleHome() {
                       <div className={s.amtCol}>
                         <span className={s.amt}>{ra.main}</span>
                         {ra.note && <span className={s.amtNote}>{ra.note}</span>}
-                        <span className={s.statusInline}>
+                        <span className={s.statusInline} key={`i-${c.status}`}>
                           <StatusPill kind={st.kind} small>
                             {st.label}
                           </StatusPill>
                         </span>
                       </div>
-                      <span className={s.statusCol}>
+                      <span className={`${s.statusCol} k-pop`} key={`d-${c.status}`}>
                         <StatusPill kind={st.kind}>{st.label}</StatusPill>
                       </span>
                       <div className={s.proof}>
@@ -337,7 +339,7 @@ function CircleHome() {
                         {c.railNote && <span className={monoNote}>{c.railNote}</span>}
                         {!c.providerRef && !c.railNote && past && <span className={s.sub}>Received the round {past.index} pot{past.paidAt ? ` · ${day(past.paidAt)}` : ''}</span>}
                       </div>
-                    </div>
+                    </FlashRow>
                   );
                 })}
               </section>
@@ -396,6 +398,37 @@ function CircleHome() {
   );
 }
 
+/** A row that flashes when its payment lands (status changes to succeeded). */
+function FlashRow({ status, className, children }: { status: string; className: string; children: React.ReactNode }) {
+  const changed = useChanged(status);
+  return <div className={`${className} ${changed && status === 'succeeded' ? 'k-flash' : ''}`}>{children}</div>;
+}
+
+/** A tiny burst in the four country colours when a pot pays out. */
+function Confetti() {
+  const colors = ['#178a4c', '#c4302b', '#c99400', '#2457b0'];
+  return (
+    <>
+      {Array.from({ length: 14 }, (_, i) => {
+        const angle = (i / 14) * Math.PI * 2;
+        return (
+          <span
+            key={i}
+            className="k-confetti"
+            aria-hidden="true"
+            style={{
+              background: colors[i % 4],
+              ['--dx' as string]: `${Math.round(Math.cos(angle) * 60)}px`,
+              ['--dy' as string]: `${Math.round(Math.sin(angle) * 60)}px`,
+              animationDelay: `${(i % 3) * 60}ms`,
+            }}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 function RoundCard({
   state,
   recipient,
@@ -416,16 +449,20 @@ function RoundCard({
   const pill = ROUND_PILL[state.round.status] ?? { kind: 'neutral' as PillKind, label: state.round.status };
   const rc = state.round.recipient.country;
   const paid = state.round.status === 'paid';
+  const justPaid = useChanged(paid, 2200) && paid;
   return (
-    <section className={s.card}>
+    <section className={`${s.card} ${justPaid ? s.celebrate : ''}`}>
       <div className={s.cardHead}>
         <span className={s.kicker}>
           ROUND {state.round.index} OF {n}
         </span>
-        <StatusPill kind={pill.kind}>{pill.label}</StatusPill>
+        <span key={state.round.status} className="k-pop">
+          <StatusPill kind={pill.kind}>{pill.label}</StatusPill>
+        </span>
       </div>
       <div className={s.recipient}>
         <div className={s.bigAvatar} style={{ background: TINT[rc][0], color: TINT[rc][1] }}>
+          {justPaid && <Confetti />}
           {initials(state.round.recipient.name)}
           <span className={s.bigAvatarFlag}>
             <Flag country={rc} size={[20, 13]} />
@@ -435,7 +472,7 @@ function RoundCard({
           <div className={s.potLabel}>
             {recipient ? state.round.recipient.name : first(state.round.recipient.name)} {paid ? 'received' : 'receives'} this pot
           </div>
-          <div className={s.potAmt}>{pot ? fmtMinor(pot, state.round.recipient.ccy) : '—'}</div>
+          <div className={s.potAmt}>{pot ? <CountUp value={pot} ccy={state.round.recipient.ccy} from={0n} /> : '—'}</div>
         </div>
       </div>
       <div className={s.small}>
@@ -500,7 +537,7 @@ function OweCard({
 
   if (mine.status === 'succeeded') {
     return (
-      <section className={s.owe}>
+      <section className={`${s.owe} k-pop`} key="paid">
         {top('You paid this round')}
         <div>
           <div className={s.oweAmt}>{fmtMinor(mine.amountMinor, mine.ccy)}</div>
@@ -528,7 +565,7 @@ function OweCard({
 
   if (mine.status === 'pending') {
     return (
-      <section className={s.owe}>
+      <section className={`${s.owe} k-enter`} key="pending">
         {top('Waiting for you')}
         <div>
           <div className={s.oweAmt}>{fmtMinor(mine.amountMinor, mine.ccy)}</div>
@@ -558,7 +595,7 @@ function OweCard({
         <div className={s.oweAmt}>{fmtMinor(mine.amountMinor, mine.ccy)}</div>
         <div className={s.oweSub}>= {fmtUsd(unit)} · rate locked for this round</div>
       </div>
-      <button className={s.payBtn} onClick={onPay} disabled={busy || !collecting}>
+      <button className={`${s.payBtn} k-press`} onClick={onPay} disabled={busy || !collecting}>
         {busy ? 'Sending…' : mine.status === 'failed' ? `Try again with ${rail}` : `Pay with ${rail}`}
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M3 8h9M8.5 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -583,12 +620,14 @@ function SoFar({ netting, paidRounds, n }: { netting: RoundState['netting']; pai
       <div className={s.stats}>
         <div className={s.stat}>
           <span className={s.statLabel}>Moved</span>
-          <span className={s.statVal}>{fmtUsd(netting.movedUsdCents)}</span>
+          <span className={s.statVal}>
+            <CountUp value={netting.movedUsdCents} ccy="USD" dropZeroCents />
+          </span>
         </div>
         <div className={s.stat}>
           <span className={s.statLabel}>Crossed a border</span>
           <span className={s.statVal}>
-            {fmtUsd(netting.netCrossBorderUsdCents)} <span className={s.statPct}>{pct}%</span>
+            <CountUp value={netting.netCrossBorderUsdCents} ccy="USD" dropZeroCents /> <span className={s.statPct}>{pct}%</span>
           </span>
         </div>
       </div>

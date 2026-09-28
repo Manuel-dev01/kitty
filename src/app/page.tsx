@@ -5,6 +5,7 @@
 import Link from 'next/link';
 import { Logo, SandboxPill } from '@/components/brand';
 import { Flag } from '@/components/Flag';
+import { CountUp, Reveal } from '@/components/motion';
 import type { Country } from '@/lib/ui/types';
 import s from './landing.module.css';
 
@@ -46,7 +47,7 @@ export default function Landing() {
 
         <section className={`${s.hero} ${s.px}`}>
           <div className={s.heroText}>
-            <div className={s.names}>
+            <div className={`${s.names} k-enter`}>
               <div>
                 In Lagos it&apos;s <span style={{ color: '#178a4c' }}>ajo</span>.
               </div>
@@ -57,16 +58,16 @@ export default function Landing() {
                 In Nairobi, <span style={{ color: '#c4302b' }}>chama</span>.
               </div>
             </div>
-            <h1 className={s.h1}>Your circle moved abroad; your money rails didn&apos;t.</h1>
-            <p className={s.lede}>
+            <h1 className={`${s.h1} k-enter`} style={{ ['--k-delay' as string]: '120ms' }}>Your circle moved abroad; your money rails didn&apos;t.</h1>
+            <p className={`${s.lede} k-enter`} style={{ ['--k-delay' as string]: '240ms' }}>
               Kitty runs your savings circle across Nigeria, Kenya, Uganda and Ghana. Everyone pays and gets paid on their own
               mobile money or bank. Your money stays home.
             </p>
-            <div className={s.ctas}>
-              <Link href={START} className={s.btn}>
+            <div className={`${s.ctas} k-enter`} style={{ ['--k-delay' as string]: '360ms' }}>
+              <Link href={START} className={`${s.btn} k-press`}>
                 Start a circle
               </Link>
-              <Link href={LIVE} className={s.btnGhost}>
+              <Link href={LIVE} className={`${s.btnGhost} k-press`}>
                 <span className={s.live} />
                 See a live round
               </Link>
@@ -76,11 +77,11 @@ export default function Landing() {
           {/* Desktop: four cities around the $0 disc */}
           <div className={s.comp} aria-label="Four cities, each paying and paid in its own pool">
             <svg className={s.compSvg} width="600" height="540" viewBox="0 0 600 540" aria-hidden="true">
-              <path d="M120 80H480V460H120Z" fill="none" stroke="#8f8370" strokeWidth="1.5" strokeDasharray="5 6" />
+              <path className={s.march} d="M120 80H480V460H120Z" fill="none" stroke="#8f8370" strokeWidth="1.5" strokeDasharray="5 6" />
             </svg>
             <div className={s.compLabel}>recorded as FX position · no money crossed</div>
-            {CITIES.map((x) => (
-              <div key={x.c} className={`${s.city} ${x.pos}`}>
+            {CITIES.map((x, i) => (
+              <div key={x.c} className={`${s.city} ${x.pos} ${s.floaty}`} style={{ ['--k-i' as string]: i }}>
                 <div className={s.cityHead}>
                   <Flag country={x.c} size={[24, 16]} />
                   <span className={s.cityName}>{x.city}</span>
@@ -92,7 +93,9 @@ export default function Landing() {
             ))}
             <div className={s.disc}>
               <div className={s.discLabel}>NET CROSSED A BORDER</div>
-              <div className={s.discBig}>$0</div>
+              <div className={s.discBig}>
+                <CountUp value={0n} from={80000n} ccy="USD" dropZeroCents durationMs={2200} />
+              </div>
               <div className={s.discSub}>$800 moved · 4 rounds</div>
             </div>
           </div>
@@ -116,7 +119,9 @@ export default function Landing() {
                   NET CROSSED
                   <br />A BORDER
                 </div>
-                <div className="b">$0</div>
+                <div className="b">
+                  <CountUp value={0n} from={80000n} ccy="USD" dropZeroCents durationMs={2200} />
+                </div>
                 <div className="s">$800 moved</div>
               </div>
             </div>
@@ -130,7 +135,7 @@ export default function Landing() {
               <h2 className={s.h2}>How it works</h2>
               <div className={s.sectionSub}>Same circle rules as home. Different plumbing.</div>
             </div>
-            <div className={s.steps}>
+            <Reveal className={s.steps}>
               {[
                 ['01', 'Start a circle', 'Set a contribution in dollars, say $50 a round, and invite members by phone or email. Each person sees it in their own currency.'],
                 ['02', 'Everyone pays at home', "Paystack in Nigeria, M-Pesa in Kenya, MTN MoMo in Uganda and Ghana. Your contribution goes into your own country's pool."],
@@ -144,7 +149,7 @@ export default function Landing() {
                   </div>
                 </div>
               ))}
-            </div>
+            </Reveal>
           </div>
         </section>
 
@@ -161,7 +166,7 @@ export default function Landing() {
             </p>
           </div>
 
-          <div className={s.table} role="table" aria-label="Four rounds of one circle">
+          <Reveal className={s.table} delay={120}>
             <div className={`${s.tr6} ${s.thead}`} role="row">
               <div>MEMBER</div>
               <div>ROUND 1</div>
@@ -215,7 +220,7 @@ export default function Landing() {
               </div>
               <div />
             </div>
-          </div>
+          </Reveal>
 
           <div className={s.tableMobile}>
             <div className={`${s.mRow} ${s.mRowHead}`}>
@@ -237,7 +242,7 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className={s.stat}>
+        <Reveal className={s.stat}>
           <div className={s.statBig}>8.78%</div>
           <div>
             <div className={s.statText}>Average cost of sending $200 to sub-Saharan Africa. 3 in 4 corridors cost more than 10%.</div>
@@ -248,14 +253,14 @@ export default function Landing() {
             <div className="r">Remittances: $600 across borders</div>
             <div className="z">Kitty: $0</div>
           </div>
-        </section>
+        </Reveal>
 
         <section id="honest" className={`${s.split} ${s.px}`}>
           <div className={s.splitText}>
             <h2 className={s.h2}>What&apos;s real, and what isn&apos;t yet</h2>
             <p className={s.para}>This is a working product on sandbox rails. Every screen tells you which is which.</p>
           </div>
-          <div className={s.cards}>
+          <Reveal className={s.cards} delay={100}>
             <div className={s.card}>
               <SandboxPill />
               <div className={s.cardTitle}>Real requests, test money</div>
@@ -288,11 +293,11 @@ export default function Landing() {
                 If country pools ever fall out of balance, only that difference would settle, through a licensed partner.
               </p>
             </div>
-          </div>
+          </Reveal>
         </section>
 
         <section className={`${s.closing} ${s.px}`}>
-          <div className={s.closingInner}>
+          <Reveal className={s.closingInner}>
             <h2 className={s.h2} style={{ maxWidth: 760 }}>
               Keep the circle together. Keep the money home.
             </h2>
@@ -305,7 +310,7 @@ export default function Landing() {
                 See a live round
               </Link>
             </div>
-          </div>
+          </Reveal>
         </section>
 
         <footer className={`${s.footer} ${s.px}`}>
