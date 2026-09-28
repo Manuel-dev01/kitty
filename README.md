@@ -141,7 +141,7 @@ library, and no payment SDKs: each provider is called with `fetch` behind one in
 
 ## Docs
 
-[Strategy](docs/STRATEGY.md) · [Architecture](docs/ARCHITECTURE.md) · [Demo script](docs/DEMO.md) ·
+[Strategy](docs/STRATEGY.md) · [Architecture](docs/ARCHITECTURE.md) · [Demo script](docs/DEMO.md) · [Demo checklist](docs/DEMO_CHECKLIST.md) ·
 [Design canvases](docs/design) · [Roadmap](docs/ROADMAP.md)
 
 ## Team
