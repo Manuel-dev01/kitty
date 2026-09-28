@@ -2,6 +2,9 @@ import { getSql } from '@/lib/db';
 import { errorJson, json } from '@/lib/json';
 import { currentDemo, judgeAdvance, rounds } from '@/lib/rounds';
 
+
+// Provider and model calls are bounded individually; this caps the whole request.
+export const maxDuration = 60;
 /**
  * Judge mode step: open the next round if needed and start every unpaid contribution on its own rail.
  * Body: { circleId?: string, auto?: boolean }. `auto` = "Run full cycle" (Paystack step may be replayed).

@@ -180,3 +180,19 @@
 .menuItem { transition: background-color 0.15s ease; }
 .payBtn { transition: transform 0.15s ease, background-color 0.2s ease; }
 @media (prefers-reduced-motion: reduce) { .main > *, .segOn, .celebrate { animation: none; } .tabBar { transition: none; } }
+
+/* Layout fixes (audit U3): every row shares the header's column tracks, long proof chips wrap inside their cell,
+   names wrap instead of spilling into the rail column, and the two-card rows can shrink. */
+.two > * { min-width: 0; }
+.oweAmt, .potAmt { overflow-wrap: anywhere; }
+.proof { min-width: 0; }
+.proof :global(button) { white-space: normal; height: auto; min-height: 28px; text-align: left; }
+@media (min-width: 1024px) {
+  .thead, .row { grid-template-columns: minmax(170px, 1.5fr) minmax(80px, 0.8fr) 130px 170px minmax(0, 1.6fr); }
+  .whoTop { flex-wrap: wrap; }
+  .oweAmt { font-size: clamp(34px, 3.2vw, 48px); }
+  .potAmt { font-size: clamp(26px, 2.4vw, 34px); }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .two { grid-template-columns: 1fr; }
+}

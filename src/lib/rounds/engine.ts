@@ -201,14 +201,23 @@ export function makeRounds(deps: RoundsDeps) {
     const replay = !simulated && status === 'pending' && round.replay_allowed ? await replayFor(c) : null;
     if (!simulated && !replay && status === 'pending') return;
     if (!simulated && status === 'failed') {
-      await sql`update contributions set status = 'failed' where id = ${c.id} and status = 'pending'`;
+      await sql`update contributions set status = 'failed' where id = ${c.id} and status = 'pending' and provider_ref = ${c.provider_ref}`;
       return;
     }
     const amount = BigInt(c.amount_minor);
     const collected = (adapter as Partial<{ collectedAmount(ref: string): Promise<bigint> }>).collectedAmount;
-    if (!simulated && !replay && collected && (await collected.call(adapter, c.provider_ref)) < amount) {
-      await sql`update contributions set status = 'failed' where id = ${c.id}`; // short payment
-      return;
+    if (!simulated && !replay && collected) {
+      let got: bigint;
+      try {
+        got = await collected.call(adapter, c.provider_ref);
+      } catch {
+        return; // provider unreachable: stays pending, the next read verifies again
+      }
+      if (got < amount) {
+        // short payment
+        await sql`update contributions set status = 'failed' where id = ${c.id} and status = 'pending' and provider_ref = ${c.provider_ref}`;
+        return;
+      }
     }
     const country = c.country as Country;
     const received = country === 'KE' ? BigInt(c.rail_amount_minor ?? c.amount_minor) : amount;
@@ -217,7 +226,9 @@ export function makeRounds(deps: RoundsDeps) {
       { type: 'contribution', id: c.id },
       contributionLines(round.circle_id, COUNTRY_RAIL[country], c.ccy as Ccy, amount, received),
     );
-    await sql`update contributions set status = 'succeeded', simulated = ${simulated}, replay = ${replay} where id = ${c.id}`;
+    // Journals are idempotent per contribution; the status only moves if this is still the current attempt.
+    await sql`update contributions set status = 'succeeded', simulated = ${simulated}, replay = ${replay}
+              where id = ${c.id} and status = 'pending' and provider_ref = ${c.provider_ref}`;
   }
 
   /**
@@ -251,11 +262,21 @@ export function makeRounds(deps: RoundsDeps) {
     const [claimed] = await sql<Row[]>`update rounds set status = 'paying' where id = ${round.id} and status = 'funded' returning id`;
     if (!claimed) return;
 
-    const pot = -(await ledger.balance(potAccount(round.circle_id, ccy), ccy)); // the pot is a credit balance
-    if (pot <= 0n) {
-      await sql`update rounds set status = 'funded' where id = ${round.id} and status = 'paying'`;
-      throw new RoundError('Nothing in the pot to pay out', 500);
+    let payoutId: string | null = null;
+    let journalRef: string | null = null;
+    try {
+      return await sendPayout();
+    } catch (e) {
+      // Nothing may leave the round stuck at "paying" with no provider reference: undo and wait for a retry.
+      console.error('payout preparation failed', (e as Error).message);
+      if (payoutId && journalRef) await reversePayout(round, payoutId, journalRef);
+      else await sql`update rounds set status = 'funded' where id = ${round.id} and status = 'paying'`;
+      throw e;
     }
+
+    async function sendPayout() {
+    const pot = -(await ledger.balance(potAccount(round.circle_id, ccy), ccy)); // the pot is a credit balance
+    if (pot <= 0n) throw new RoundError('Nothing in the pot to pay out', 500);
 
     const [payout] = await sql<Row[]>`
       insert into payouts (round_id, member_id, ccy, amount_minor, status)
@@ -264,16 +285,19 @@ export function makeRounds(deps: RoundsDeps) {
       returning id`;
     const [{ n }] = await sql<Row[]>`
       select count(*)::int as n from journals where kind = 'payout' and ref_type = 'payout' and ref_id like ${`${payout.id}#%`}`;
+    payoutId = payout.id;
     const ref = { type: 'payout', id: `${payout.id}#${n + 1}` };
     const lines = payoutLines(round.circle_id, COUNTRY_RAIL[country], ccy, pot, cashPaid(country, pot));
 
     try {
       await ledger.postJournal('payout', ref, lines);
+      journalRef = ref.id;
     } catch (e) {
       if (!(e instanceof InsufficientPool)) throw e;
       // Invariant 3: refuse rather than overdraw.
       await sql`update payouts set status = 'failed' where id = ${payout.id}`;
       await sql`update rounds set status = 'withheld' where id = ${round.id} and status = 'paying'`;
+      payoutId = null; // handled: nothing to undo
       return;
     }
     const [recipient] = await sql<Row[]>`select * from members where id = ${round.recipient_member_id}`;
@@ -286,6 +310,8 @@ export function makeRounds(deps: RoundsDeps) {
       const simulated = deps.limits?.payout(toMember(recipient), e) ?? null;
       if (simulated) await markPaid(round, payout.id, simulated);
       else await reversePayout(round, payout.id, ref.id);
+    }
+    payoutId = null; // outcome recorded either way
     }
   }
 
@@ -310,10 +336,13 @@ export function makeRounds(deps: RoundsDeps) {
     if (!round || round.status === 'paid' || round.status === 'withheld') return;
     const snap = await snapshotById(round.fx_snapshot_id);
 
-    // 1. Pending contributions: ask each member's own rail.
-    for (const c of await contributionsOf(roundId)) {
-      if (c.status === 'pending' && c.provider_ref) await settleContribution(round, c, snap, deps.rail(c.country, snap));
-    }
+    // 1. Pending contributions: ask each member's own rail, all rails at once.
+    const pendingNow = (await contributionsOf(roundId)).filter((c) => c.status === 'pending' && c.provider_ref);
+    await Promise.all(
+      pendingNow.map((c) =>
+        settleContribution(round, c, snap, deps.rail(c.country, snap)).catch((e) => console.error('settle', c.id, (e as Error).message)),
+      ),
+    );
 
     // 2. Withhold rule: a promise that has passed without payment withholds the round and costs reputation.
     const overdue = await sql<Row[]>`

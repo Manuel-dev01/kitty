@@ -11,3 +11,7 @@ export function errorJson(e: unknown): Response {
   if (status >= 500) console.error(err);
   return json({ error: err.message ?? String(e) }, { status });
 }
+
+/** Route ids are uuids; anything else is simply "not found" (not a 500 from Postgres' uuid parser). */
+export const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+export const notFound = (what = 'Not found') => json({ error: what }, { status: 404 });

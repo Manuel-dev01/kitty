@@ -37,6 +37,9 @@ const initials = (name: string) =>
 const first = (name: string) => name.split(' ')[0];
 const day = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+/** A calendar date (Postgres `date`, e.g. a promise): the same day for every viewer, whatever their timezone. */
+const dateOnly = (iso: string | null) =>
+  iso ? new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }) : '';
 const RAIL_FOOT: Record<Country, string> = {
   NG: "Card or bank transfer in naira. Stays in Nigeria's pool.",
   KE: "An M-Pesa prompt on your phone, in shillings. Stays in Kenya's pool.",
@@ -54,7 +57,7 @@ function statusOf(c: Contribution): { kind: PillKind; label: string } {
   if (c.status === 'succeeded') return { kind: 'paid', label: 'Paid' };
   if (c.status === 'pending') return { kind: 'pending', label: c.member.country === 'NG' ? 'Pending · checkout' : 'Pending · on phone' };
   if (c.status === 'failed') return { kind: 'failed', label: 'Failed' };
-  if (c.promisedFor) return { kind: 'promised', label: `Promised ${day(c.promisedFor)}` };
+  if (c.promisedFor) return { kind: 'promised', label: `Promised ${dateOnly(c.promisedFor)}` };
   return { kind: 'unpaid', label: 'Unpaid' };
 }
 
@@ -89,20 +92,45 @@ function CircleHome() {
   const [busy, setBusy] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const { state, error, refresh } = useRoundState(data?.roundId ?? null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { state, error, gone, refresh } = useRoundState(data?.roundId ?? null);
 
   const loadCircle = useCallback(async () => {
-    const r = await fetch(`/api/circles/${circleId}`, { cache: 'no-store' });
-    if (r.status === 404) return setNotFound(true);
-    if (r.ok) setData(await r.json());
+    try {
+      const r = await fetch(`/api/circles/${circleId}`, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+      if (r.status === 404) return setNotFound(true);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setData(await r.json());
+      setLoadError(null);
+    } catch (e) {
+      setLoadError((e as Error).name === 'TimeoutError' ? 'The server took too long to answer.' : (e as Error).message);
+    }
   }, [circleId]);
   useEffect(() => {
     void loadCircle();
   }, [loadCircle]);
+  // A first load that failed retries by itself, so the page never sits on a skeleton forever.
+  useEffect(() => {
+    if (!loadError || data) return;
+    const t = setTimeout(() => void loadCircle(), 4000);
+    return () => clearTimeout(t);
+  }, [loadError, data, loadCircle]);
   // A round finishing (or a new one opening) changes the payout order and dates: reload the circle.
   useEffect(() => {
     if (state) void loadCircle();
   }, [state?.round.status, state?.round.id, loadCircle]); // eslint-disable-line react-hooks/exhaustive-deps
+  // While the current round is paid, keep checking for the next one: the judge (or another member) opens it
+  // after the payout, and this page must follow instead of staying on the finished round.
+  const paidAndWaiting = state?.round.status === 'paid' && state.circle.status !== 'completed' && data?.roundId === state.round.id;
+  useEffect(() => {
+    if (!paidAndWaiting) return;
+    const t = setInterval(() => void loadCircle(), 3000);
+    return () => clearInterval(t);
+  }, [paidAndWaiting, loadCircle]);
+  // The round (and this circle) no longer exists, e.g. after "Reset demo": follow the live demo circle.
+  useEffect(() => {
+    if (gone) router.replace('/c/current');
+  }, [gone, router]);
 
   const members = data?.members ?? [];
   const asParam = params.get('as');
@@ -110,8 +138,22 @@ function CircleHome() {
   const setViewer = (id: string) => {
     setMenu(false);
     setCheckoutUrl(null);
+    setMessage(null);
     router.replace(`/c/${circleId}?as=${id}`, { scroll: false });
   };
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element).closest?.('[aria-haspopup="menu"], [role="menu"]')) setMenu(false);
+    };
+    document.addEventListener('keydown', close);
+    document.addEventListener('pointerdown', close);
+    return () => {
+      document.removeEventListener('keydown', close);
+      document.removeEventListener('pointerdown', close);
+    };
+  }, [menu]);
 
   const mine = state?.contributions.find((c) => c.member.id === viewer?.id);
   const recipient = state ? members.find((m) => m.id === state.round.recipient.id) : undefined;
@@ -168,6 +210,7 @@ function CircleHome() {
         onClick={() => setMenu((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={menu}
+        aria-label={`Viewing as ${viewer.name} (demo). Change member`}
         title={`Viewing as ${viewer.name} (demo)`}
       >
         {initials(viewer.name)}
@@ -255,7 +298,7 @@ function CircleHome() {
             )}
           </div>
 
-          {paidRef && (
+          {paidRef && mine?.status !== 'succeeded' && (
             <div className={s.callout}>
               Back from Paystack. Kitty is confirming <span className={monoNote}>{paidRef}</span> with Paystack’s verify API.
             </div>
@@ -263,7 +306,14 @@ function CircleHome() {
           {message && <div className={s.callout}>{message}</div>}
           {error && <p className={s.error}>Last refresh failed: {error}</p>}
 
-          {loading ? (
+          {loading && loadError && !data ? (
+            <div className={s.callout} role="alert">
+              Couldn’t load this circle ({loadError}). Retrying automatically…{' '}
+              <button type="button" className={s.dPill} style={{ display: 'inline-flex', height: 32 }} onClick={() => void loadCircle()}>
+                Retry now
+              </button>
+            </div>
+          ) : loading ? (
             <Skeleton />
           ) : tab === 'ledger' ? (
             <section className={s.card}>
@@ -390,7 +440,7 @@ function CircleHome() {
 
         <aside className={s.aside} style={{ flexDirection: 'column', minHeight: 0 }}>
           {viewer && data && (
-            <TreasurerChat circleId={circleId} memberId={viewer.id} members={members} onActivity={() => void refresh()} />
+            <TreasurerChat key={viewer.id} circleId={circleId} memberId={viewer.id} members={members} onActivity={() => void refresh()} />
           )}
         </aside>
       </div>
@@ -531,7 +581,7 @@ function OweCard({
   const top = (label: string) => (
     <div className={s.oweTop}>
       <span>{label}</span>
-      <span className={s.oweTopRight}>{mine.promisedFor ? `promised ${day(mine.promisedFor)}` : `round ${state.round.index}`}</span>
+      <span className={s.oweTopRight}>{mine.promisedFor ? `promised ${dateOnly(mine.promisedFor)}` : `round ${state.round.index}`}</span>
     </div>
   );
 

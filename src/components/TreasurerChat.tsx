@@ -101,8 +101,9 @@ export function TreasurerChat({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ circleId, memberId, message, language: lang }),
+        signal: AbortSignal.timeout(60_000),
       });
-      const body = await res.json();
+      const body = await res.json().catch(() => ({ error: `The treasurer is unavailable (HTTP ${res.status}). Please try again.` }));
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       const started = (body.cards as Card[]).find((c) => c.type === 'payment_started') as Extract<Card, { type: 'payment_started' }> | undefined;
       if (started?.checkoutUrl && popup) popup.location.href = started.checkoutUrl;
@@ -111,7 +112,7 @@ export function TreasurerChat({
       onActivity?.();
     } catch (e) {
       popup?.close();
-      setError((e as Error).message);
+      setError((e as Error).name === 'TimeoutError' ? 'The treasurer took too long to answer. Please try again.' : (e as Error).message);
     } finally {
       setSending(false);
     }

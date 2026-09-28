@@ -15,6 +15,9 @@ export const DEMO_MEMBERS = [
 ] as const;
 
 export async function resetDemo(sql: Sql, rounds: Rounds, takeSnapshot: () => Promise<{ id?: string }>) {
+  // The only external call (FX rates) happens BEFORE anything is wiped, so a failure there leaves the old demo intact.
+  const snap = await takeSnapshot();
+  if (!snap.id) throw new Error('Snapshot was not stored');
   await sql`truncate journal_lines, journals, payouts, contributions, rounds, agent_messages, pending_actions, members, circles
             restart identity cascade`;
   const [circle] = await sql<{ id: string }[]>`
@@ -27,8 +30,6 @@ export async function resetDemo(sql: Sql, rounds: Rounds, takeSnapshot: () => Pr
                       now() - ${`${10 - i} minutes`}::interval)`;
   }
   await rounds.activateCircle(circle.id);
-  const snap = await takeSnapshot();
-  if (!snap.id) throw new Error('Snapshot was not stored');
   await rounds.seedFloats(circle.id, await rounds.snapshotById(snap.id));
   const roundId = await rounds.openNextRound(circle.id, snap.id);
   return { circleId: circle.id, roundId };

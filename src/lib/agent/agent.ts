@@ -43,11 +43,15 @@ function systemPrompt(member: Row, circle: Row, today: string, language?: string
   ].join('\n');
 }
 
-/** One retry for a timed-out or failing model call (live demo: a slow provider must not break the chat). */
-async function callWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+/** A whole chat turn stays inside this budget, so the member never waits minutes for an answer. */
+const TURN_BUDGET_MS = 40_000;
+
+/** One retry, and only if there is still time for it (live demo: a slow provider must not break the chat). */
+async function callWithRetry<T>(fn: () => Promise<T>, deadline: number): Promise<T> {
   try {
     return await fn();
-  } catch {
+  } catch (e) {
+    if (deadline - Date.now() < 12_000) throw e;
     return await fn();
   }
 }
@@ -105,10 +109,12 @@ export async function runAgent(opts: {
   const cards: AgentTurn['cards'] = [];
   const toolCalls: AgentTurn['toolCalls'] = [];
   let reply = '';
+  const deadline = Date.now() + TURN_BUDGET_MS;
   for (let step = 0; step < MAX_STEPS; step++) {
     let out: ChatMessage;
     try {
-      out = await callWithRetry(() => opts.llm(messages, TOOL_DEFINITIONS));
+      if (deadline - Date.now() < 3_000) throw new Error('turn budget spent');
+      out = await callWithRetry(() => opts.llm(messages, TOOL_DEFINITIONS, Math.min(25_000, deadline - Date.now())), deadline);
     } catch (e) {
       console.error('treasurer model unavailable:', (e as Error).message);
       reply = toolCalls.length

@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AfricaMap } from '@/components/AfricaMap';
 import { Logo, SandboxPill } from '@/components/brand';
 import { StepBadges } from '@/components/Badges';
@@ -32,23 +32,40 @@ export default function Dashboard() {
   const [log, setLog] = useState<string[]>([]);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
-  const { state, error, latest } = useRoundState(roundId);
+  const { state, error, gone, latest } = useRoundState(roundId);
+  const cancelled = useRef(false);
 
   const say = useCallback((msg: string) => {
     const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     setLog((l) => [`${t}  ${msg}`, ...l].slice(0, 50));
   }, []);
 
-  useEffect(() => {
-    fetch('/api/demo', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((d) => {
-        setCircleId(d.circleId ?? null);
-        setRoundId(d.roundId ?? null);
-      })
-      .catch((e) => setFatal(String(e)))
-      .finally(() => setBooted(true));
+  /** The live demo circle and its current round. A failure is shown as an error, never as "no circle". */
+  const loadCurrent = useCallback(async () => {
+    try {
+      const r = await fetch('/api/demo', { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      setCircleId(d.circleId ?? null);
+      setRoundId(d.roundId ?? null);
+      setFatal(null);
+    } catch (e) {
+      setFatal(`Couldn't reach the demo: ${(e as Error).name === 'TimeoutError' ? 'the server took too long' : (e as Error).message}`);
+    } finally {
+      setBooted(true);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadCurrent();
+  }, [loadCurrent]);
+
+  // The round we were watching no longer exists (someone pressed "Reset demo"): follow the live circle.
+  useEffect(() => {
+    if (!gone) return;
+    say('The demo was reset; following the current circle.');
+    void loadCurrent();
+  }, [gone, loadCurrent, say]);
 
   async function advance(auto: boolean, popup?: Window | null): Promise<string | null> {
     const step = await post<Step>('/api/judge/round', { circleId, auto });
@@ -71,17 +88,30 @@ export default function Dashboard() {
     return step.roundId;
   }
 
-  /** Waits (via the 1.5 s poll) until the round is paid, withheld, or stuck on a failed payout. */
-  async function settle(rid: string, timeoutMs = 180_000): Promise<RoundState | null> {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
+  /**
+   * Waits (via the 1.5 s poll) until the round is paid, withheld, stuck on a failed payout, or stuck collecting
+   * (a contribution failed or never started, with nothing still pending). Stops early if the judge resets.
+   */
+  async function settle(rid: string, timeoutMs = 90_000): Promise<RoundState | null> {
+    const started = Date.now();
+    const deadline = started + timeoutMs;
+    while (Date.now() < deadline && !cancelled.current) {
       await sleep(1000);
       const s = latest.current;
       if (!s || s.round.id !== rid) continue;
       if (s.round.status === 'paid' || s.round.status === 'withheld') return s;
       if (s.round.status === 'funded' && s.payout?.status === 'failed') return s;
+      const collecting = s.round.status === 'open' || s.round.status === 'collecting';
+      const pending = s.contributions.some((c) => c.status === 'pending');
+      const stuck = s.contributions.some((c) => c.status === 'failed' || c.status === 'unpaid');
+      if (collecting && stuck && !pending && Date.now() - started > 6000) return s;
     }
     return latest.current;
+  }
+
+  async function retryPayout(rid: string) {
+    await post(`/api/rounds/${rid}/payout`);
+    say('Retrying the payout on the recipient’s rail…');
   }
 
   async function runRound() {
@@ -101,14 +131,29 @@ export default function Dashboard() {
 
   async function runCycle() {
     setBusy('cycle');
+    cancelled.current = false;
     try {
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 5 && !cancelled.current; i++) {
         const rid = await advance(true);
         if (!rid) break;
         say('Collecting on four rails; waiting for the payout…');
-        const s = await settle(rid);
+        let s = await settle(rid);
+        // One automatic second attempt: restart failed/unstarted contributions, or retry a failed payout.
+        if (s && s.round.status !== 'paid' && s.round.status !== 'withheld' && !cancelled.current) {
+          if (s.round.status === 'funded' && s.payout?.status === 'failed') await retryPayout(rid);
+          else {
+            say('A payment didn’t go through; trying those members again…');
+            await advance(true);
+          }
+          s = await settle(rid);
+        }
+        if (cancelled.current) break;
         if (!s || s.round.status !== 'paid') {
-          say(`Stopped: round ${s?.round.index ?? '?'} is ${s?.round.status ?? 'not responding'}.`);
+          say(
+            s?.round.status === 'withheld'
+              ? `Stopped: round ${s.round.index} was withheld. Press Reset demo to start over.`
+              : `Stopped: round ${s?.round.index ?? '?'} is ${s?.round.status ?? 'not responding'}. Press Run a round to retry, or Reset demo.`,
+          );
           break;
         }
         say(`Round ${s.round.index} paid out in ${COUNTRY[s.round.recipient.country].city}.`);
@@ -116,11 +161,12 @@ export default function Dashboard() {
     } catch (e) {
       say(`Error: ${(e as Error).message}`);
     } finally {
-      setBusy(null);
+      setBusy((b) => (b === 'cycle' ? null : b));
     }
   }
 
   async function reset() {
+    cancelled.current = true; // stops a running cycle
     setBusy('reset');
     try {
       const d = await post<{ circleId: string; roundId: string }>('/api/demo');
@@ -147,6 +193,8 @@ export default function Dashboard() {
   }
 
   const completed = state?.circle.status === 'completed';
+  const withheld = state?.round.status === 'withheld';
+  const payoutFailed = state?.round.status === 'funded' && state?.payout?.status === 'failed';
   const ngWaiting = state?.contributions.find((c) => c.member.country === 'NG' && c.status === 'pending');
   const recipient = state?.round.recipient;
 
@@ -164,20 +212,45 @@ export default function Dashboard() {
           </span>
         )}
         <div className="actions" style={{ marginLeft: 'auto' }}>
-          <button className="btn go" onClick={runRound} disabled={!!busy || !circleId || completed}>
+          <button className="btn go" onClick={runRound} disabled={!!busy || !circleId || completed || withheld}>
             {busy === 'round' ? 'Starting…' : 'Run a round'}
           </button>
-          <button className="btn" onClick={runCycle} disabled={!!busy || !circleId || completed}>
+          <button className="btn" onClick={runCycle} disabled={!!busy || !circleId || completed || withheld}>
             {busy === 'cycle' ? 'Running cycle…' : 'Run full cycle'}
           </button>
-          <button className="btn ghost" onClick={reset} disabled={!!busy}>
+          <button className="btn ghost" onClick={reset} disabled={busy === 'reset' || busy === 'round'}>
             {busy === 'reset' ? 'Resetting…' : 'Reset demo'}
           </button>
         </div>
       </div>
 
-      {fatal && <p className="error">{fatal}</p>}
-      {booted && !circleId && (
+      {fatal && (
+        <div className="callout" role="alert" style={{ marginBottom: 16 }}>
+          {fatal}{' '}
+          <button className="btn small ghost" onClick={() => void loadCurrent()}>
+            Retry
+          </button>
+        </div>
+      )}
+      {withheld && (
+        <div className="callout" role="alert" style={{ marginBottom: 16 }}>
+          Round {state?.round.index} was <b>withheld</b>: a promised payment was missed, or a pool couldn’t cover the payout without going
+          below zero (Invariant 3). Press <b>Reset demo</b> to start a fresh circle.
+        </div>
+      )}
+      {payoutFailed && state && (
+        <div className="callout" role="alert" style={{ marginBottom: 16 }}>
+          The payout to {state.round.recipient.name} didn’t go through, so the ledger reversed it and the pot is intact.{' '}
+          <button
+            className="btn small go"
+            disabled={!!busy}
+            onClick={() => void retryPayout(state.round.id).catch((e) => say(`Error: ${(e as Error).message}`))}
+          >
+            Retry payout
+          </button>
+        </div>
+      )}
+      {booted && !circleId && !fatal && (
         <div className="callout" style={{ marginBottom: 16 }}>
           No demo circle yet. Press <b>Reset demo</b> to create “Lagos · Nairobi · Kampala · Accra” with round 1 open.
         </div>

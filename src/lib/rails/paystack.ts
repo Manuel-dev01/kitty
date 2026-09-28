@@ -126,15 +126,23 @@ export const paystack: RailAdapter & { collectedAmount(reference: string): Promi
     // Judge mode ("Run full cycle") has nobody at a checkout: charge the member's saved card for real.
     const saved = preferSaved ? await savedAuthorization(email) : null;
     if (saved) {
-      const charged = await call<{ reference: string; status: string }>('collect', 'POST', '/transaction/charge_authorization', {
-        authorization_code: saved.code,
-        email,
-        amount: amountMinor.toString(),
-        currency: 'NGN',
-        reference,
-        metadata: { contributionId, memberId: member.id, circleId: member.circleId, savedCard: saved.card },
-      });
-      return { providerRef: charged.reference ?? reference };
+      // One deterministic reference per contribution: if a first attempt timed out but Paystack took it, a retry is
+      // refused as a duplicate and Kitty verifies the original charge instead of charging the card again.
+      const savedRef = `kitty-ctb-${contributionId.replace(/[^A-Za-z0-9]/g, '').slice(0, 24)}-saved`;
+      try {
+        const charged = await call<{ reference: string; status: string }>('collect', 'POST', '/transaction/charge_authorization', {
+          authorization_code: saved.code,
+          email,
+          amount: amountMinor.toString(),
+          currency: 'NGN',
+          reference: savedRef,
+          metadata: { contributionId, memberId: member.id, circleId: member.circleId, savedCard: saved.card },
+        });
+        return { providerRef: charged.reference ?? savedRef };
+      } catch (e) {
+        if (/duplicate/i.test(JSON.stringify((e as { body?: unknown }).body ?? ''))) return { providerRef: savedRef };
+        throw e;
+      }
     }
     const base = process.env.PUBLIC_BASE_URL?.replace(/\/$/, '') ?? '';
     const data = await call<{ authorization_url: string; reference: string }>('collect', 'POST', '/transaction/initialize', {

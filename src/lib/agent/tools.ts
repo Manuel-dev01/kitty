@@ -237,6 +237,8 @@ async function confirmPayment(ctx: ToolContext): Promise<ToolResult> {
   const [claimed] = await ctx.sql<Row[]>`
     update pending_actions set confirmed_at = now() where token = ${token} and confirmed_at is null returning token`;
   if (!claimed) return fail('That payment was already confirmed.');
+  // At most once: the "yes" is consumed before the rail call, so a timed-out request can never be re-sent on the
+  // same consent. If it fails, the member prepares again and gives a fresh yes.
   const started = await ctx.rounds.startCollection(a.args.contributionId);
   const [m] = await ctx.sql<Row[]>`select country from members where id = ${ctx.memberId}`;
   const rail = COUNTRY[m.country as Country].rail;

@@ -15,6 +15,8 @@ export async function handleProviderEvent(sql: Sql, rounds: Rounds, event: Norma
     values (${event.provider}, ${event.eventId}, ${sql.json(event.payload as never)})
     on conflict do nothing returning event_id`;
   const roundId = await rounds.roundForProviderRef(event.providerRef);
-  if (roundId) await rounds.reconcile(roundId);
+  // The event is durable now. Reconcile is only a speed-up (the next poll does the same), so a failure here must
+  // not become a 5xx that makes the provider retry the delivery.
+  if (roundId) await rounds.reconcile(roundId).catch((e) => console.error('webhook reconcile', (e as Error).message));
   return { duplicate: inserted.length === 0, roundId };
 }

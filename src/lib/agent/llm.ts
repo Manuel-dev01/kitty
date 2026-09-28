@@ -6,9 +6,9 @@ export interface ChatMessage {
   tool_call_id?: string;
 }
 
-export type Llm = (messages: ChatMessage[], tools: readonly unknown[]) => Promise<ChatMessage>;
+export type Llm = (messages: ChatMessage[], tools: readonly unknown[], timeoutMs?: number) => Promise<ChatMessage>;
 
-export const deepseek: Llm = async (messages, tools) => {
+export const deepseek: Llm = async (messages, tools, timeoutMs = 25_000) => {
   const key = process.env.DEEPSEEK_API_KEY;
   if (!key) throw new Error('DEEPSEEK_API_KEY is not set');
   const res = await fetch(`${process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com'}/chat/completions`, {
@@ -24,7 +24,7 @@ export const deepseek: Llm = async (messages, tools) => {
       // reasoning (seen live: finish_reason "length", empty content). Leave room for the answer.
       max_tokens: 3000,
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(Math.max(3_000, timeoutMs)),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`DeepSeek HTTP ${res.status}: ${JSON.stringify(body).slice(0, 300)}`);

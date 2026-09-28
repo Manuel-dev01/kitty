@@ -5,6 +5,9 @@ import { rounds } from '@/lib/rounds';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
+
+// Provider and model calls are bounded individually; this caps the whole request.
+export const maxDuration = 60;
 /**
  * The treasurer chat. Body: { circleId, memberId, message }.
  * (Demo identity: the circle page lets you pick which member you are. The server checks membership, and

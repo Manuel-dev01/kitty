@@ -1,5 +1,5 @@
 import { getSql } from '@/lib/db';
-import { errorJson, json } from '@/lib/json';
+import { errorJson, isUuid, json, notFound } from '@/lib/json';
 
 /**
  * A circle, its members in payout order, every round (status + when its pot was paid, from the payout
@@ -8,6 +8,8 @@ import { errorJson, json } from '@/lib/json';
 export async function GET(_req: Request, ctx: RouteContext<'/api/circles/[id]'>) {
   try {
     const { id } = await ctx.params;
+    // A malformed id is simply a circle that doesn't exist (not a 500 from Postgres' uuid parser).
+    if (!isUuid(id)) return notFound('Circle not found');
     const sql = getSql();
     const [circle] = await sql`select id, name, status, contribution_unit_minor, period from circles where id = ${id}`;
     if (!circle) return json({ error: 'Circle not found' }, { status: 404 });

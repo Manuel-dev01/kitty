@@ -40,7 +40,7 @@ export default function Landing() {
             <a href="#why">Why it works</a>
             <a href="#honest">What&apos;s real</a>
             <Link href={START} className={`${s.btn} ${s.btnSm}`}>
-              Start a circle
+              Try the demo circle
             </Link>
           </div>
         </nav>
@@ -65,7 +65,7 @@ export default function Landing() {
             </p>
             <div className={`${s.ctas} k-enter`} style={{ ['--k-delay' as string]: '360ms' }}>
               <Link href={START} className={`${s.btn} k-press`}>
-                Start a circle
+                Try the demo circle
               </Link>
               <Link href={LIVE} className={`${s.btnGhost} k-press`}>
                 <span className={s.live} />
@@ -137,7 +137,7 @@ export default function Landing() {
             </div>
             <Reveal className={s.steps}>
               {[
-                ['01', 'Start a circle', 'Set a contribution in dollars, say $50 a round, and invite members by phone or email. Each person sees it in their own currency.'],
+                ['01', 'Start a circle', 'Set a contribution in dollars, say $50 a round, and each member sees it in their own currency. (In this demo the four-country circle is already set up: open it and pay as any member.)'],
                 ['02', 'Everyone pays at home', "Paystack in Nigeria, M-Pesa in Kenya, MTN MoMo in Uganda and Ghana. Your contribution goes into your own country's pool."],
                 ['03', 'The pot lands at home', "When it's your turn, the pot is paid from your country's pool in your currency, with a provider reference you can check."],
               ].map(([n, t, b]) => (
@@ -303,7 +303,7 @@ export default function Landing() {
             </h2>
             <div className={s.ctas}>
               <Link href={START} className={s.btn}>
-                Start a circle
+                Try the demo circle
               </Link>
               <Link href={LIVE} className={s.btnGhost}>
                 <span className={s.live} />

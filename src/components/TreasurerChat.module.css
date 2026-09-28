@@ -63,3 +63,13 @@
 .chip, .yes, .no, .send { transition: transform 0.15s ease, border-color 0.2s ease, opacity 0.2s ease; }
 .chip:active:not(:disabled), .yes:active:not(:disabled), .no:active:not(:disabled), .send:active:not(:disabled) { transform: scale(0.96); }
 @media (prefers-reduced-motion: reduce) { .them, .me, .announce, .started, .confirm { animation: none; } }
+
+/* Audit U4: on mobile the panel needs a definite height so the message list scrolls and new replies stay in view. */
+@media (max-width: 1023px) {
+  .panel { height: calc(100dvh - 170px); min-height: 420px; }
+  .msgs { min-height: 0; }
+}
+
+/* Audit U14: 44 px touch targets for the scripted chips on touch screens; 16 px input so iOS doesn't zoom. */
+.input { font-size: 16px; }
+@media (max-width: 1023px) { .chip { min-height: 44px; } }
