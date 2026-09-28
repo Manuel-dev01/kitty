@@ -192,3 +192,56 @@ button { font: inherit; }
 .chip:hover:not(:disabled) { border-color: var(--ink); }
 .select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; max-width: 220px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ===== Dashboard retheme to the Kitty design system (visual only; judge-mode logic untouched) ===== */
+:root {
+  --bg: var(--k-bg);
+  --panel: var(--k-panel);
+  --ink: var(--k-ink);
+  --muted: var(--k-muted);
+  --line: var(--k-line);
+  --accent: var(--k-paid-ink);
+  --gold: #a8641e;
+  --bad: var(--k-failed-ink);
+  --replay-ink: var(--k-muted);
+  --replay-bg: var(--k-bg);
+  --sim-ink: var(--k-muted);
+  --sim-bg: var(--k-bg);
+  --mono: var(--k-mono);
+}
+body { font-family: var(--k-body); background: var(--k-bg); color: var(--k-ink); }
+.panel { border-radius: 18px; }
+.panel h2 { font: 600 12px var(--k-mono); letter-spacing: 0.04em; color: var(--k-muted); }
+.btn { background: var(--k-ink); border-color: var(--k-ink); font-family: var(--k-body); }
+.btn:hover:not(:disabled) { filter: none; background: var(--k-accent); border-color: var(--k-accent); }
+.btn.go { background: var(--k-ink); border-color: var(--k-ink); }
+.btn.go:hover:not(:disabled) { background: var(--k-accent); border-color: var(--k-accent); }
+.btn.ghost { background: transparent; border: 1.5px solid var(--k-ink); color: var(--k-ink); }
+.btn.ghost:hover:not(:disabled) { background: var(--k-panel); color: var(--k-ink); }
+.pill { font-family: var(--k-body); border: 0; }
+.pill.unpaid, .pill.open { background: var(--k-unpaid-bg); color: var(--k-muted); }
+.pill.pending, .pill.collecting, .pill.paying { background: var(--k-pending-bg); color: var(--k-pending-ink); }
+.pill.succeeded, .pill.paid, .pill.funded { background: var(--k-paid-bg); color: var(--k-paid-ink); }
+.pill.failed, .pill.withheld { background: var(--k-failed-bg); color: var(--k-failed-ink); }
+.badge.replay, .badge.sim { background: var(--k-bg); color: var(--k-muted); border: 1.5px dashed var(--k-faint); font: 500 11px var(--k-mono); }
+.member { border-color: var(--k-line); border-radius: 14px; background: var(--k-panel); }
+.member.recipient { border-color: var(--k-ink); box-shadow: none; background: var(--k-you-row); }
+.meter .headline { font-family: var(--k-display); letter-spacing: -0.03em; }
+.meter .headline .x { color: var(--k-ink); }
+.bar > span { background: repeating-linear-gradient(135deg, var(--k-ink) 0 4px, var(--k-muted) 4px 8px); }
+.bar.naive > span { background: var(--k-line); }
+.journal { border-color: var(--k-line-soft); }
+.journal .kind.contribution { color: var(--k-paid-ink); }
+.journal .kind.conversion { color: var(--k-promised-ink); }
+.journal .kind.payout { color: var(--k-accent); }
+.balanced { color: var(--k-paid-ink); }
+.proof { background: var(--k-ink); color: var(--k-on-ink); border: 0; }
+.proof .big { font-family: var(--k-display); }
+.proof .muted { color: var(--k-on-ink-muted) !important; }
+.proof .zero { background: #2a2620; border-color: #3a342b; color: var(--k-on-ink); }
+.callout { border: 1.5px dashed var(--k-faint); background: var(--k-panel); }
+.map .land { fill: #ebe3d2; stroke: #d6cbb4; }
+.map .city-label { font-family: var(--k-display); }
+.map .city-sub { font-family: var(--k-body); }
+.legend i { border-top-color: var(--k-faint); }
+.dash-top { display: flex; align-items: center; gap: 12px; }

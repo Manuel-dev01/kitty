@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { AfricaMap } from '@/components/AfricaMap';
+import { Logo, SandboxPill } from '@/components/brand';
 import { StepBadges } from '@/components/Badges';
 import { Flag } from '@/components/Flag';
 import { LedgerPanel } from '@/components/LedgerPanel';
@@ -152,8 +153,10 @@ export default function Dashboard() {
   return (
     <main className="wrap">
       <div className="topbar">
-        <div className="brand">
-          Kitty <small>{state?.circle.name ?? 'Lagos · Nairobi · Kampala · Accra'}</small>
+        <div className="dash-top">
+          <Logo />
+          <SandboxPill />
+          <span className="muted" style={{ fontWeight: 600 }}>{state?.circle.name ?? 'Lagos · Nairobi · Kampala · Accra'}</span>
         </div>
         {state && (
           <span className={`pill ${state.round.status}`}>
@@ -243,7 +246,8 @@ export default function Dashboard() {
             )}
             {circleId && (
               <p className="muted" style={{ fontSize: '0.8em', marginBottom: 0 }}>
-                Member view: <Link href={`/c/${circleId}`}>/c/{circleId.slice(0, 8)}…</Link>
+                Member view:{' '}
+                <Link href={`/c/${circleId}${recipient ? `?as=${recipient.id}` : ''}`}>open the circle as {recipient ? recipient.name.split(' ')[0] : 'a member'}</Link>
                 {state && (
                   <>
                     {' '}· FX {state.round.fxSnapshot.source === 'open.er-api' ? 'open.er-api (indicative)' : state.round.fxSnapshot.source}, one
