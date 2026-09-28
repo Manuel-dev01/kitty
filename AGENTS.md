@@ -52,7 +52,10 @@ Judges are industry experts **and employers**, so the repo is read like a portfo
   to the session member. `confirm_payment` takes no arguments and needs the member's own explicit yes, judged by the server
   (`consent.ts`). The adversarial tests are in `agent.db.test.ts`; the live English, Pidgin and Swahili run is in `agent.live.ts`.
   The late-member beat ran live on production: Kofi's Pidgin promise, then a confirmed MoMo payment.
-- ⬜ README (judge guide, real vs replay vs simulated, honest limits), the Claude Design UI pass (`docs/DESIGN_BRIEF.md`), and the video.
+- ✅ UI from Claude Design (`docs/design/*.dc.html`): landing `/`, circle home `/c/[id]` (with a demo "view as" menu and the
+  treasurer aside), `/c/current` redirecting to the live demo circle, and the dashboard retheme (visual only). Tokens are `--k-*`
+  in `globals.css`, fonts via `next/font`, shared pieces in `src/components/brand.tsx`. A production full cycle still ends on $800 / $0.
+- ⬜ README (judge guide, real vs replay vs simulated, honest limits) and the video.
 
 ## Hard constraints
 
