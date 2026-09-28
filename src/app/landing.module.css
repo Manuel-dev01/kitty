@@ -33,7 +33,7 @@
 .comp { position: relative; width: 600px; height: 540px; }
 .compSvg { position: absolute; inset: 0; }
 .compLabel {
-  position: absolute; left: 300px; top: 412px; transform: translate(-50%, -50%); background: var(--k-bg);
+  position: absolute; left: 300px; top: 398px; transform: translate(-50%, -50%); background: var(--k-bg); z-index: 1;
   padding: 4px 10px; font: 500 12px var(--k-mono); color: var(--k-muted); white-space: nowrap;
 }
 .city {

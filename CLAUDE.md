@@ -55,7 +55,11 @@ Judges are industry experts **and employers**, so the repo is read like a portfo
 - ✅ UI from Claude Design (`docs/design/*.dc.html`): landing `/`, circle home `/c/[id]` (with a demo "view as" menu and the
   treasurer aside), `/c/current` redirecting to the live demo circle, and the dashboard retheme (visual only). Tokens are `--k-*`
   in `globals.css`, fonts via `next/font`, shared pieces in `src/components/brand.tsx`. A production full cycle still ends on $800 / $0.
-- ⬜ README (judge guide, real vs replay vs simulated, honest limits) and the video.
+- ✅ Real rails upgrade: Paystack saved-card charges (`saved_authorizations`, `charge_authorization`) replace replay in "Run full
+  cycle"; a production run showed NG real in all 4 rounds. B2C re-tested with the secret in the path: still no result callback, so that limit stands.
+- ✅ Motion (`src/components/motion.tsx`, keyframes in `globals.css`); CountUp uses bigint interpolation. All of it is off under reduced motion.
+- ✅ README: judge guide, the real / simulated table, architecture, tests, honest limits.
+- ⬜ Video; the submission form; add teammates to the README.
 
 ## Hard constraints
 
