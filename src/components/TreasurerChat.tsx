@@ -1,47 +1,84 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { COUNTRY } from '@/lib/ui/format';
 import type { Country } from '@/lib/ui/types';
-import { Flag } from './Flag';
+import s from './TreasurerChat.module.css';
 
-type Card =
-  | { type: 'confirm'; token: string; summary: string }
-  | { type: 'promise'; date: string }
-  | { type: 'payment_started'; providerRef: string; rail: string; checkoutUrl?: string };
+type ConfirmCard = {
+  type: 'confirm';
+  token: string;
+  summary: string;
+  amount?: string;
+  rail?: string;
+  round?: number;
+  recipientName?: string;
+  usd?: string;
+  account?: string;
+};
+type Card = ConfirmCard | { type: 'promise'; date: string } | { type: 'payment_started'; providerRef: string; rail: string; checkoutUrl?: string };
 type Msg = { role: 'user' | 'assistant' | 'circle'; content: string; cards?: Card[] };
 export type ChatMember = { id: string; name: string; country: Country };
+type Lang = 'en' | 'pcm' | 'sw';
 
-const SUGGESTIONS = ['What do I owe this round?', 'Pay my contribution', 'I go pay Friday abeg', 'Nitalipa Ijumaa'];
+const LANGS: { id: Lang; label: string }[] = [
+  { id: 'en', label: 'English' },
+  { id: 'pcm', label: 'Pidgin' },
+  { id: 'sw', label: 'Kiswahili' },
+];
+const SUGGESTIONS: Record<Lang, string[]> = {
+  en: ['What do I owe this round?', 'Pay my contribution', "I'll pay on Friday"],
+  pcm: ['Wetin I owe this round?', 'Abeg make I pay my own now', 'I go pay Friday abeg'],
+  sw: ['Nadaiwa kiasi gani?', 'Nataka kulipa sasa', 'Nitalipa Ijumaa'],
+};
+const YES: Record<Lang, [string, string]> = { en: ['Yes', 'Not now'], pcm: ['Yes', 'No be now'], sw: ['Ndiyo', 'Si sasa'] };
+const DEFAULT_LANG: Record<Country, Lang> = { NG: 'pcm', GH: 'pcm', KE: 'sw', UG: 'en' };
 
-const fmtDate = (d: string) =>
-  new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+function CalendarIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 12 12" aria-hidden="true">
+      <rect x="1.8" y="2.6" width="8.4" height="7.6" rx="1.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M1.8 5h8.4M4.2 1.4v2M7.8 1.4v2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 /**
- * The circle's treasurer (DeepSeek, tools enforced server-side). The Yes / Not now buttons simply send those
- * words as the member's message: consent is still judged by the server from what the member said.
+ * The circle's treasurer (docs/design/Kitty Circle Home.dc.html). Money safety lives on the server: the
+ * "Yes, pay" and "Not now" buttons only send those words, and the server judges consent from them.
  */
-export function TreasurerChat({ circleId, members, onActivity }: { circleId: string; members: ChatMember[]; onActivity?: () => void }) {
-  const [memberId, setMemberId] = useState<string>('');
+export function TreasurerChat({
+  circleId,
+  memberId,
+  members,
+  onActivity,
+}: {
+  circleId: string;
+  memberId: string;
+  members: ChatMember[];
+  onActivity?: () => void;
+}) {
+  const me = members.find((m) => m.id === memberId);
+  const [lang, setLang] = useState<Lang>(me ? DEFAULT_LANG[me.country] : 'en');
   const [messages, setMessages] = useState<Msg[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
-  const me = members.find((m) => m.id === memberId);
 
   useEffect(() => {
-    if (!memberId && members.length) setMemberId(members.find((m) => m.country === 'GH')?.id ?? members[0].id);
-  }, [members, memberId]);
+    if (me) setLang(DEFAULT_LANG[me.country]);
+  }, [me?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
-    if (!memberId) return;
     const res = await fetch(`/api/agent?circleId=${circleId}&memberId=${memberId}`, { cache: 'no-store' });
-    const body = await res.json();
+    const body = await res.json().catch(() => ({}));
     if (res.ok) setMessages(body.messages);
   }, [circleId, memberId]);
 
   useEffect(() => {
     setMessages([]);
+    setError(null);
     void load();
   }, [load]);
 
@@ -51,9 +88,10 @@ export function TreasurerChat({ circleId, members, onActivity }: { circleId: str
 
   async function send(text: string) {
     const message = text.trim();
-    if (!message || !memberId || sending) return;
-    // Paystack needs a checkout window, and browsers only allow opening it inside the click.
-    const popup = me?.country === 'NG' && /^(yes|ok|oya|sure|confirm)/i.test(message) ? window.open('', 'kitty-paystack', 'popup,width=480,height=780') : null;
+    if (!message || sending) return;
+    // Paystack needs its checkout window, and browsers only allow opening one inside the click.
+    const affirmative = /^(yes|ok|oya|sure|confirm|ndiyo|sawa)/i.test(message);
+    const popup = me?.country === 'NG' && affirmative ? window.open('', 'kitty-paystack', 'popup,width=480,height=780') : null;
     setSending(true);
     setError(null);
     setDraft('');
@@ -62,14 +100,14 @@ export function TreasurerChat({ circleId, members, onActivity }: { circleId: str
       const res = await fetch('/api/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ circleId, memberId, message }),
+        body: JSON.stringify({ circleId, memberId, message, language: lang }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       const started = (body.cards as Card[]).find((c) => c.type === 'payment_started') as Extract<Card, { type: 'payment_started' }> | undefined;
       if (started?.checkoutUrl && popup) popup.location.href = started.checkoutUrl;
       else popup?.close();
-      await load(); // brings in the reply, its cards, and any circle announcement
+      await load();
       onActivity?.();
     } catch (e) {
       popup?.close();
@@ -84,101 +122,134 @@ export function TreasurerChat({ circleId, members, onActivity }: { circleId: str
   const answered = lastConfirmAt >= 0 && messages.slice(lastConfirmAt + 1).some((m) => m.role === 'user');
 
   return (
-    <section className="panel chat" aria-label="Treasurer chat">
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-        <h2 style={{ margin: 0 }}>Treasurer</h2>
-        <label className="muted" style={{ fontSize: '0.8em', display: 'flex', gap: 6, alignItems: 'center' }}>
-          Chatting as
-          <select value={memberId} onChange={(e) => setMemberId(e.target.value)} className="select">
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} · {COUNTRY[m.country].city}
-              </option>
-            ))}
-          </select>
-        </label>
+    <section className={s.panel} aria-label="Treasurer">
+      <div className={s.head}>
+        <div className={s.id}>
+          <div className={s.mark} aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 28 28">
+              <circle cx="14" cy="14" r="8" fill="none" stroke="#fffdf8" strokeWidth="2" />
+              <circle cx="14" cy="6" r="3" fill="#fffdf8" />
+            </svg>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span className={s.name}>Treasurer</span>
+            <span className={s.tag}>Nothing moves until you say yes{me ? ` · talking to ${me.name.split(' ')[0]}` : ''}</span>
+          </div>
+        </div>
+        <div className={s.langs} role="radiogroup" aria-label="Language">
+          {LANGS.map((l) => (
+            <button key={l.id} type="button" role="radio" aria-checked={lang === l.id} className={`${s.lang} ${lang === l.id ? s.langOn : ''}`} onClick={() => setLang(l.id)}>
+              {l.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="msgs" ref={scroller} aria-live="polite">
+      <div className={s.msgs} ref={scroller} aria-live="polite">
+        <div className={s.spacer} />
         {messages.length === 0 && !sending && (
-          <p className="muted" style={{ margin: 0 }}>
-            {me ? `Hi ${me.name.split(' ')[0]}. ` : ''}Ask what you owe, pay your contribution, or tell the circle when you’ll pay. English,
-            Pidgin or Swahili. I never move money until you say yes.
+          <p className={s.empty}>
+            Ask what you owe, pay your contribution, or tell the circle when you&apos;ll pay. I never move money until you say yes, and I
+            can only ever take your own payment, for the amount the circle set.
           </p>
         )}
         {messages.map((m, i) => (
-          <div key={i} className={`bubble ${m.role}`}>
-            {m.role === 'circle' && <span className="who-tag">Circle</span>}
-            <span>{m.content}</span>
-            {m.cards?.map((c, k) => (
-              <div key={k} className={`card ${c.type}`}>
-                {c.type === 'confirm' && (
-                  <>
-                    <div className="card-title">Confirm payment</div>
-                    <div>{c.summary}</div>
-                    {i === lastConfirmAt && !answered && (
-                      <div className="actions" style={{ marginTop: 8 }}>
-                        <button className="btn small go" onClick={() => send('Yes')} disabled={sending}>
+          <div key={i} style={{ display: 'contents' }}>
+            {m.role === 'circle' ? (
+              <div className={s.announce}>
+                <CalendarIcon />
+                {m.content} · shared with the circle
+              </div>
+            ) : m.content ? (
+              <div className={m.role === 'user' ? s.me : s.them}>{m.content}</div>
+            ) : null}
+            {m.cards?.map((c, k) => {
+              if (c.type === 'confirm') {
+                const live = i === lastConfirmAt && !answered;
+                return (
+                  <div key={k} className={s.confirm}>
+                    <div className={s.cardKicker}>CONFIRM PAYMENT</div>
+                    <div className={s.cardTitle}>
+                      {c.amount ? (
+                        <>
+                          Pay <span className={s.num}>{c.amount}</span> now with {c.rail}?
+                        </>
+                      ) : (
+                        `${c.summary}?`
+                      )}
+                    </div>
+                    {c.amount && (
+                      <div className={s.rows}>
+                        <span>For</span>
+                        <span>
+                          Round {c.round} · {c.recipientName?.split(' ')[0]}&apos;s pot
+                        </span>
+                        <span>Equals</span>
+                        <span className={s.num}>{c.usd}</span>
+                        <span>Into</span>
+                        <span className={s.acct}>{c.account}</span>
+                      </div>
+                    )}
+                    {live ? (
+                      <div className={s.btns}>
+                        <button type="button" className={s.yes} onClick={() => send(YES[lang][0])} disabled={sending}>
                           Yes, pay
                         </button>
-                        <button className="btn small ghost" onClick={() => send('Not now')} disabled={sending}>
+                        <button type="button" className={s.no} onClick={() => send(YES[lang][1])} disabled={sending}>
                           Not now
                         </button>
                       </div>
+                    ) : (
+                      <div className={s.done}>Answered below.</div>
                     )}
-                  </>
-                )}
-                {c.type === 'promise' && (
-                  <>
-                    <div className="card-title">Promise recorded</div>
-                    <div>
-                      Pays by <b>{fmtDate(c.date)}</b>. The circle has been told.
-                    </div>
-                  </>
-                )}
-                {c.type === 'payment_started' && (
-                  <>
-                    <div className="card-title">Payment started · {c.rail}</div>
-                    <div className="mono">ref {c.providerRef}</div>
-                    {c.checkoutUrl && (
-                      <a className="btn small go" style={{ marginTop: 8, display: 'inline-flex' }} href={c.checkoutUrl} target="kitty-paystack" rel="noreferrer">
-                        Open Paystack checkout
-                      </a>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
+                  </div>
+                );
+              }
+              if (c.type === 'promise') {
+                return (
+                  <div key={k} className={s.announce}>
+                    <CalendarIcon />
+                    Promise recorded: pays by {fmtDate(c.date)}
+                  </div>
+                );
+              }
+              return (
+                <div key={k} className={s.started}>
+                  <div className={s.cardKicker}>PAYMENT STARTED · {c.rail.toUpperCase()}</div>
+                  <div className={s.startedRef}>ref {c.providerRef}</div>
+                  {c.checkoutUrl && (
+                    <a className={s.checkout} href={c.checkoutUrl} target="kitty-paystack" rel="noreferrer">
+                      Open the Paystack checkout
+                    </a>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ))}
-        {sending && <div className="bubble assistant muted">Treasurer is thinking…</div>}
+        {sending && <div className={`${s.thinking} ${s.dots}`}>Treasurer is thinking</div>}
       </div>
 
-      {error && <p className="error" style={{ margin: 0 }}>{error}</p>}
-      <div className="actions">
-        {SUGGESTIONS.map((s) => (
-          <button key={s} className="chip" onClick={() => send(s)} disabled={sending || !memberId}>
-            {s}
+      {error && <p className={s.error}>{error}</p>}
+      <div className={s.chips}>
+        {SUGGESTIONS[lang].map((q) => (
+          <button key={q} type="button" className={s.chip} onClick={() => send(q)} disabled={sending}>
+            {q}
           </button>
         ))}
       </div>
       <form
+        className={s.foot}
         onSubmit={(e) => {
           e.preventDefault();
           void send(draft);
         }}
-        style={{ display: 'flex', gap: 8 }}
       >
-        {me && <Flag country={me.country} />}
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={me ? `Message as ${me.name.split(' ')[0]}…` : 'Message the treasurer…'}
-          aria-label="Message the treasurer"
-          disabled={!memberId}
-        />
-        <button className="btn small go" type="submit" disabled={sending || !draft.trim()}>
-          Send
+        <input className={s.input} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Ask, or say when you'll pay…" aria-label="Message the treasurer" />
+        <button className={s.send} type="submit" disabled={sending || !draft.trim()} aria-label="Send">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M3 8h9M8.5 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </button>
       </form>
     </section>

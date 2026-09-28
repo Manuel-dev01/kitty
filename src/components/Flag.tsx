@@ -1,10 +1,16 @@
 import type { Country } from '@/lib/ui/types';
 
 /** Inline SVG flags: emoji flags render as plain letters on Windows (and on many projectors). */
-export function Flag({ country, title }: { country: Country; title?: string }) {
+export function Flag({ country, title, size, style }: { country: Country; title?: string; size?: [number, number]; style?: React.CSSProperties }) {
   const label = title ?? country;
   return (
-    <svg className="flag" viewBox="0 0 30 20" role="img" aria-label={label}>
+    <svg
+      className="flag"
+      viewBox="0 0 30 20"
+      role="img"
+      aria-label={label}
+      style={size ? { width: size[0], height: size[1], flex: 'none', ...style } : style}
+    >
       <title>{label}</title>
       {country === 'NG' && (
         <>

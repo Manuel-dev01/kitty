@@ -31,11 +31,24 @@ export interface ToolContext {
   today: string; // YYYY-MM-DD
 }
 
+/** The confirmation card the member sees. Every field is computed by the server, never by the model. */
+export interface ConfirmCard {
+  type: 'confirm';
+  token: string;
+  summary: string;
+  amount: string;
+  rail: string;
+  round: number;
+  recipientName: string;
+  usd: string;
+  account: string;
+}
+
 export interface ToolResult {
   /** What the model sees. */
   content: Record<string, unknown>;
   /** What the UI renders (cards and actions), never seen as instructions by anyone. */
-  ui?: { type: 'confirm'; token: string; summary: string } | { type: 'promise'; date: string } | { type: 'payment_started'; providerRef: string; rail: string; checkoutUrl?: string };
+  ui?: ConfirmCard | { type: 'promise'; date: string } | { type: 'payment_started'; providerRef: string; rail: string; checkoutUrl?: string };
 }
 
 export const TOOL_DEFINITIONS = [
@@ -91,9 +104,11 @@ export const TOOL_DEFINITIONS = [
 async function currentContribution(ctx: ToolContext) {
   const [row] = await ctx.sql<Row[]>`
     select c.id, c.ccy, c.amount_minor, c.status, c.promised_for, c.provider_ref, r.id as round_id, r.index, r.status as round_status,
-           m.name, m.country
+           m.name, m.country, m.rail, rm.name as recipient_name, ci.contribution_unit_minor
     from rounds r
     join contributions c on c.round_id = r.id and c.member_id = ${ctx.memberId}
+    join members rm on rm.id = r.recipient_member_id
+    join circles ci on ci.id = r.circle_id
     join members m on m.id = c.member_id
     where r.circle_id = ${ctx.circleId}
     order by r.index desc limit 1`;
@@ -171,6 +186,17 @@ async function preparePayment(ctx: ToolContext): Promise<ToolResult> {
   if (c.status === 'pending') return fail('A payment for this round is already waiting for your approval on your phone or checkout.');
   if (!['open', 'collecting'].includes(c.round_status)) return fail(`The round is ${c.round_status}; it is not collecting.`);
   const summary = `Pay ${fmtMinor(c.amount_minor, c.ccy)} for round ${c.index} with ${COUNTRY[c.country as Country].rail}`;
+  const card = (token: string): ConfirmCard => ({
+    type: 'confirm',
+    token,
+    summary,
+    amount: fmtMinor(c.amount_minor, c.ccy),
+    rail: COUNTRY[c.country as Country].rail,
+    round: c.index,
+    recipientName: c.recipient_name,
+    usd: fmtMinor(c.contribution_unit_minor, 'USD'),
+    account: `cash:${c.rail}:${c.ccy}`,
+  });
   const [open] = await ctx.sql<Row[]>`
     select token from pending_actions
     where member_id = ${ctx.memberId} and circle_id = ${ctx.circleId} and action = 'pay_contribution'
@@ -179,7 +205,7 @@ async function preparePayment(ctx: ToolContext): Promise<ToolResult> {
   if (open) {
     return {
       content: { ok: true, summary, alreadyPrepared: true, next: 'Ask the member to reply yes to confirm.' },
-      ui: { type: 'confirm', token: open.token, summary },
+      ui: card(open.token),
     };
   }
   const token = randomBytes(12).toString('base64url');
@@ -189,7 +215,7 @@ async function preparePayment(ctx: ToolContext): Promise<ToolResult> {
             now() + ${`${PREPARE_TTL_MINUTES} minutes`}::interval, now())`;
   return {
     content: { ok: true, summary, expiresInMinutes: PREPARE_TTL_MINUTES, next: 'Ask the member to reply yes to confirm. Do not confirm in this turn.' },
-    ui: { type: 'confirm', token, summary },
+    ui: card(token),
   };
 }
 

@@ -12,10 +12,11 @@ const UUID = /^[0-9a-f-]{36}$/i;
  */
 export async function POST(req: Request) {
   try {
-    const { circleId, memberId, message } = (await req.json().catch(() => ({}))) as Record<string, string>;
+    const { circleId, memberId, message, language } = (await req.json().catch(() => ({}))) as Record<string, string>;
     if (!UUID.test(circleId ?? '') || !UUID.test(memberId ?? '')) return json({ error: 'circleId and memberId are required' }, { status: 400 });
     if (typeof message !== 'string' || !message.trim()) return json({ error: 'message is required' }, { status: 400 });
-    const turn = await runAgent({ sql: getSql(), rounds: rounds(), llm: deepseek, circleId, memberId, message });
+    const lang = ['en', 'pcm', 'sw'].includes(language) ? language : undefined;
+    const turn = await runAgent({ sql: getSql(), rounds: rounds(), llm: deepseek, circleId, memberId, message, language: lang });
     return json({ reply: turn.reply, cards: turn.cards });
   } catch (e) {
     return errorJson(e);

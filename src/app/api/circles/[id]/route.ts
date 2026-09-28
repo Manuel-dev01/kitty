@@ -1,7 +1,10 @@
 import { getSql } from '@/lib/db';
 import { errorJson, json } from '@/lib/json';
 
-/** A circle, its members in payout order, and its current round id (for /c/[circleId]). */
+/**
+ * A circle, its members in payout order, every round (status + when its pot was paid, from the payout
+ * journal: real dates only), and the current round id. Used by /c/[circleId].
+ */
 export async function GET(_req: Request, ctx: RouteContext<'/api/circles/[id]'>) {
   try {
     const { id } = await ctx.params;
@@ -10,8 +13,24 @@ export async function GET(_req: Request, ctx: RouteContext<'/api/circles/[id]'>)
     if (!circle) return json({ error: 'Circle not found' }, { status: 404 });
     const members = await sql`
       select id, name, country, rail, reputation_score, payout_position from members where circle_id = ${id} order by payout_position`;
-    const [round] = await sql`select id from rounds where circle_id = ${id} order by index desc limit 1`;
-    return json({ circle, members, roundId: round?.id ?? null });
+    const rounds = await sql`
+      select r.id, r.index, r.status, r.recipient_member_id,
+             (select max(j.created_at) from journals j
+              where j.kind = 'payout' and j.ref_type = 'payout' and j.ref_id like p.id::text || '#%') as paid_at
+      from rounds r left join payouts p on p.round_id = r.id
+      where r.circle_id = ${id} order by r.index`;
+    return json({
+      circle: { ...circle, unitUsdCents: circle.contribution_unit_minor },
+      members,
+      rounds: rounds.map((r) => ({
+        id: r.id,
+        index: r.index,
+        status: r.status,
+        recipientMemberId: r.recipient_member_id,
+        paidAt: r.status === 'paid' ? r.paid_at : null,
+      })),
+      roundId: rounds.at(-1)?.id ?? null,
+    });
   } catch (e) {
     return errorJson(e);
   }

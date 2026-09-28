@@ -1,5 +1,30 @@
 /* Kitty: light, high-contrast theme (projectors wash out dark UIs). No CSS framework. */
 :root {
+  /* Kitty design system (docs/design/*.dc.html) */
+  --k-bg: #f5efe3;
+  --k-panel: #fffdf8;
+  --k-ink: #1c1915;
+  --k-muted: #4a443b;
+  --k-faint: #8f8370;
+  --k-line: #e3dac8;
+  --k-line-soft: #efe8da;
+  --k-accent: #b8502a;
+  --k-on-ink: #f5efe3;
+  --k-on-ink-muted: #d9cfbd;
+  --k-paid-bg: #e3f1e7;
+  --k-paid-ink: #155f34;
+  --k-pending-bg: #fbf0d4;
+  --k-pending-ink: #7a4f00;
+  --k-unpaid-bg: #eee7da;
+  --k-promised-bg: #e4ebf8;
+  --k-promised-ink: #1f4c9c;
+  --k-failed-bg: #f8e3e1;
+  --k-failed-ink: #8a211c;
+  --k-you-row: #fdf8ea;
+  --k-display: var(--font-display), 'Bricolage Grotesque', system-ui, sans-serif;
+  --k-body: var(--font-body), 'Hanken Grotesk', system-ui, sans-serif;
+  --k-mono: var(--font-mono), 'IBM Plex Mono', ui-monospace, monospace;
+
   --bg: #f5f2ea;
   --panel: #fffdf8;
   --ink: #16171b;

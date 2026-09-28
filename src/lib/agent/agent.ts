@@ -22,13 +22,16 @@ export class AgentError extends Error {
   }
 }
 
-function systemPrompt(member: Row, circle: Row, today: string) {
+const LANGUAGE: Record<string, string> = { en: 'English', pcm: 'Nigerian Pidgin', sw: 'Swahili' };
+
+function systemPrompt(member: Row, circle: Row, today: string, language?: string) {
   const c = COUNTRY[member.country as Country];
   return [
     `You are the treasurer of "${circle.name}", a rotating savings circle (ajo / susu / chama) whose members live in different countries.`,
     `You are talking to ${member.name} in ${c.city}, ${c.name}, who pays and is paid with ${c.rail}. Today is ${today}.`,
     'Reply in the language and register the member uses: English, Nigerian Pidgin, or Swahili. Be warm, brief (1–3 sentences) and practical.',
     'Write plain text only: no markdown, no asterisks, no bullet lists.',
+    ...(language && LANGUAGE[language] ? [`The member chose ${LANGUAGE[language]} in the app: prefer it unless they write in another language.`] : []),
     'Only promise what your tools do. You cannot schedule reminders or messages for later; do not offer to.',
     'Rules you must follow:',
     '- Get facts from your tools. Never invent amounts, dates, references or statuses; quote amounts exactly as the tools give them.',
@@ -63,6 +66,8 @@ export async function runAgent(opts: {
   memberId: string;
   message: string;
   today?: string;
+  /** The language the member picked in the chat ('en' | 'pcm' | 'sw'): a preference, not an override. */
+  language?: string;
 }): Promise<AgentTurn> {
   const { sql, circleId, memberId } = opts;
   const message = opts.message.trim().slice(0, 1000);
@@ -92,7 +97,7 @@ export async function runAgent(opts: {
     today,
   };
   const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt(member, circle, today) },
+    { role: 'system', content: systemPrompt(member, circle, today, opts.language) },
     ...history.reverse().map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content as string })),
     { role: 'user', content: message },
   ];
